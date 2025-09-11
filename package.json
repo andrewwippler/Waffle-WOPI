@@ -1,0 +1,31 @@
+{
+  "name": "collabora-online-integration-middleware",
+  "version": "0.1.0",
+  "private": true,
+  "description": "An application from the Collabora Online Integration Example developed by Andrew Wippler",
+  "scripts": {
+    "start": "node ./bin/www",
+    "dev": "nodemon ./bin/www"
+  },
+  "dependencies": {
+    "@xmldom/xmldom": "^0.8.11",
+    "axios": "^1.11.0",
+    "body-parser": "^2.2.0",
+    "cookie-parser": "~1.4.7",
+    "debug": "~4.4.1",
+    "dotenv": "^17.2.2",
+    "express": "^5.1.0",
+    "express-session": "^1.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "jwks-rsa": "^3.2.0",
+    "morgan": "^1.10.1",
+    "multer": "^2.0.2",
+    "officegen": "^0.6.5",
+    "xpath": "0.0.34"
+  },
+  "license": "Apache",
+  "author": "Andrew Wippler",
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
