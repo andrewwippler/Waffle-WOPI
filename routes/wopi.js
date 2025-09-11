@@ -13,7 +13,8 @@ const multer = require('multer');
 const upload = multer({ dest: '/tmp' })
 
 const {DOCUMENTSERVER_URL, FILES_DIR, SETTINGS_DIR, MIDDLEWARE_SERVER } = require("../helpers/vars.js");
-const { on } = require('events');
+
+const { listSettingsFiles } = require('../helpers/files.js');
 
 /* *
  *  wopi CheckFileInfo endpoint
@@ -41,7 +42,7 @@ router.get('/files/:fileId', function(req, res) {
       IsAdminUser: req.wopi.isAdminUser,
       Version: stats.mtimeMs.toString()
     };
-  console.log(json);
+  // console.log(json);
     res.json(json);
 
 });
@@ -54,11 +55,8 @@ router.get('/files/:fileId', function(req, res) {
  *  https://HOSTNAME/wopi/files/<document_id>/contents
  */
 router.get('/files/:fileId/contents', function(req, res) {
-	// we just return the content of a fake text file
-	// in a real case you should use the file id
-	// for retrieving the file from the storage and
-  // send back the file content as response
 
+  // send back the file content as response
   const filepath = path.join(FILES_DIR, req.params.fileId);
     if (!fs.existsSync(filepath)) {
       return res.status(404).json({ error: "File not found" });
@@ -75,9 +73,6 @@ router.get('/files/:fileId/contents', function(req, res) {
  *  https://HOSTNAME/wopi/files/<document_id>/contents
  */
 router.post('/files/:fileId/contents', function(req, res) {
-	// we log to the console so that is possible
-	// to check that saving has triggered this wopi endpoint
-  console.log('wopi PutFile endpoint');
 
   if (!req.wopi.canWrite) {
     return res.status(403).json({ error: "Read-only access" });
@@ -122,8 +117,9 @@ router.get('/collaboraUrl', function(req, res) {
                 return;
             }
             let mimeType = 'text/plain';
-          let nodes = xpath.select("/wopi-discovery/net-zone/app[@name='" + mimeType + "']/action", doc);
-          let settings = xpath.select("/wopi-discovery/net-zone/app[@name='Settings']/action", doc);
+            let nodes = xpath.select("/wopi-discovery/net-zone/app[@name='" + mimeType + "']/action", doc);
+            let settings = xpath.select("/wopi-discovery/net-zone/app[@name='Settings']/action", doc);
+
             if (!nodes || nodes.length !== 1) {
                 let err = 'The requested mime type is not handled'
                 res.status(404).send(err);
@@ -145,56 +141,10 @@ router.get('/collaboraUrl', function(req, res) {
     });
 });
 
-// Utility: recursively list files in a directory
-function listSettingsFiles(dir, baseUrl, kind = 'userconfig') {
 
-  if (kind === 'userconfig') {
-    realDir = path.join(dir, 'userconfig');
-    realKind = 'user';
-  } else if (kind === 'systemconfig') {
-    realDir = path.join(dir, 'systemconfig');
-    realKind = 'shared';
-  } else {
-    throw new Error('Invalid kind parameter');
-  }
-  const response = {
-    kind: realKind,
-    autotext: [],
-    xcu: [],
-    browsersetting: []
-  };
-
-  function walk(currentDir, relPath = "") {
-    const files = fs.readdirSync(currentDir);
-    for (const file of files) {
-      const fullPath = path.join(currentDir, file);
-      const relFilePath = path.join(relPath, file);
-      const stat = fs.statSync(fullPath);
-      if (stat.isDirectory()) {
-        walk(fullPath, relFilePath);
-      } else {
-        const uri = `${baseUrl}/settings/${relFilePath.replace(/\\/g, "/")}`;
-        const stamp = stat.mtimeMs.toString();
-
-        // Categorize by path
-        if (relFilePath.includes('autotext')) {
-          response.autotext.push({ stamp, uri });
-        } else if (relFilePath.includes('xcu')) {
-          response.xcu.push({ stamp, uri });
-        } else if (relFilePath.includes('browsersetting')) {
-          response.browsersetting.push({ stamp, uri });
-        }
-      }
-    }
-  }
-  walk(realDir);
-  return response;
-}
 
 // e.g. settings/userconfig/xcu/paragraphStyles.xcu
 // e.g. settings/systemconfig/xcu/defaultStyles.xcu
-// see https://sdk.collaboraonline.com/docs/configuration/admin/admin.html
-
 router.get('/settings', (req, res) => {
     const { type } = req.query;
 
@@ -222,7 +172,6 @@ router.get('/settings', (req, res) => {
 // TODO: Save settings to files
 // e.g. settings/userconfig/xcu/paragraphStyles.xcu
 // e.g. settings/systemconfig/xcu/defaultStyles.xcu
-// see https://sdk.collaboraonline.com/docs/configuration/admin/admin.html
 router.post('/settings/upload', upload.single('file'), (req, res) => {
     const { fileId } = req.query;
 

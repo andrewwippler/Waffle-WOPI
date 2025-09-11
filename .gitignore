@@ -18,3 +18,4 @@ temp
 yarn-error.log
 .pnpm-debug.log
 files
+build.sh

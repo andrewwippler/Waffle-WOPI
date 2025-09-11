@@ -174,10 +174,4 @@ router.post("/rename", (req, res) => {
   res.redirect("/");
 });
 
-
-
-// https://office.wplr.rocks/browser/b037cf11b3/cool.html?WOPISrc=http%3A%2F%2Flocalhost%3A3000%2Fwopi%2Ffiles%2F1
-
-
-
 module.exports = router;
