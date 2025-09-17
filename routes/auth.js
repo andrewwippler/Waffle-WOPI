@@ -6,6 +6,8 @@ const axios = require('axios');
 const qs = require('qs');
 const jwt = require('jsonwebtoken');
 
+const { createAccessToken } = require("../helpers/middleware.js");
+
 const {DEX_ISSUER, CLIENT_ID, CLIENT_SECRET, DOCUMENTSERVER_URL, MIDDLEWARE_SERVER } = require("../helpers/vars.js");
 
 // Dex login
@@ -53,7 +55,9 @@ router.get("/callback", async (req, res) => {
       name: userInfo.name || userInfo.preferred_username || userInfo.email || "Unnamed User"
     };
 
-    res.redirect("/");
+    const token = createAccessToken(req.session.user, null);
+    res.cookie('access_token', token, { httpOnly: true, secure: true, sameSite: 'lax' });
+    res.redirect(req.session.redirectAfterLogin || '/');
   } catch (err) {
     console.error("Callback error:", err.response?.data || err.message);
     res.status(500).send("Authentication failed");

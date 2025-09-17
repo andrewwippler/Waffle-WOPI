@@ -18,7 +18,7 @@ function createAccessToken(user, fileId, canWrite = true) {
     fileId,
     canWrite,
   };
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: "10h" });
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: "7d" });
 }
 
 const client = jwksClient({
@@ -35,7 +35,8 @@ function getKey(header, callback) {
 function validateAccessToken(req, res, next) {
   const token =
     req.query.access_token ||
-    req.headers["authorization"]?.replace("Bearer ", "");
+    req.headers["authorization"]?.replace("Bearer ", "") ||
+    req.cookies?.access_token;
 
   if (!token) {
     return res.status(401).json({ error: "Missing access token" });
