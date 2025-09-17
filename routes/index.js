@@ -20,7 +20,7 @@ router.get("/", (req, res) => {
   const files = fs.readdirSync(FILES_DIR).filter(f => f.endsWith(".docx"));
   const fileLinks = files.length ? files.map(f => `<li><a href="/edit/${encodeURIComponent(f)}">${f}</a></li>`).join("") : "<li>No documents yet</li>";
 
-  res.send(`<!DOCTYPE html><html><head><title>Document List</title>
+  res.send(`<!DOCTYPE html><html><head><title>Waffle WOPI @ ${MIDDLEWARE_SERVER}</title>
     <style>
     body { font-family: Arial, sans-serif; margin: 20px; }
     h1 { color: #333; }
@@ -66,7 +66,7 @@ router.get("/edit/:filename", (req, res) => {
   // server_url ends with ?
   const wopiSrc = `WOPISrc=${MIDDLEWARE_SERVER}/wopi/files/${encodeURIComponent(fileId)}`;
   let source = req.session.user.server_url + wopiSrc;
-  res.send(`<!DOCTYPE html><html><head><title>Edit ${fileId}</title>
+  res.send(`<!DOCTYPE html><html><head><title>Edit ${fileId} @ ${MIDDLEWARE_SERVER}</title>
     <style>
       html, body { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
       #collabora-online-viewer { border: none; width: 100%; height: 100vh; }
