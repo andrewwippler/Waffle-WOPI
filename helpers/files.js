@@ -3,21 +3,35 @@ const path = require("path");
 const officegen = require("officegen");
 
 /**
- * Create an empty .docx file at the given path.
- * @param {string} filePath - Full path where the docx file should be saved.
+ * Create an empty file at the given path.
+ * @param {string} filePath - Full path where the file should be saved.
+ * @param {string} fileType - The file type to create. Defaults to "docx".
+ * @param {string} creator - The creator name to set in the document metadata. Defaults to 'Collabora Middleware'.
  * @returns {Promise<string>} Resolves with the file path once saved.
  */
-function createEmptyDocx(filePath) {
-
+function createEmptyFile(filePath, fileType = "docx", creator = 'Collabora Middleware') {
   return new Promise((resolve, reject) => {
-    const docx = officegen("docx");
+    const file = officegen({
+      type: fileType,
+      creator: creator,
+    });
+
+    // Add at least one sheet for Excel files
+    if (fileType === "xlsx") {
+      file.makeNewSheet();
+    }
+    // Add at least one slide for PowerPoint files
+    if (fileType === "pptx") {
+      file.makeNewSlide();
+    }
+
     const out = fs.createWriteStream(filePath);
 
     out.on("error", err => reject(err));
-    docx.on("error", err => reject(err));
+    file.on("error", err => reject(err));
     out.on("close", () => resolve(filePath));
 
-    docx.generate(out);
+    file.generate(out);
   });
 }
 
@@ -68,6 +82,6 @@ function listSettingsFiles(dir, baseUrl, kind = 'userconfig') {
 }
 
 module.exports = {
-  createEmptyDocx,
+  createEmptyFile,
   listSettingsFiles
 };

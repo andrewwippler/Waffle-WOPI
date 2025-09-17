@@ -1,24 +1,27 @@
-'use strict';
+"use strict";
 
-let express = require('express');
+let express = require("express");
 let router = express.Router();
-const fs = require('fs');
-const path = require('path');
+const fs = require("fs");
+const path = require("path");
 
-const {
-  requireLogin,
-  validateAccessToken
-} = require('../helpers/middleware.js');
+const { createEmptyFile } = require("../helpers/files.js");
 
-const { createEmptyDocx } = require('../helpers/files.js');
-
-const {DEX_ISSUER, CLIENT_ID, CLIENT_SECRET, JWT_SECRET, DOCUMENTSERVER_URL, MIDDLEWARE_SERVER, NODE_ENV, FILES_DIR} = require("../helpers/vars.js");
-
+const { MIDDLEWARE_SERVER, FILES_DIR } = require("../helpers/vars.js");
 
 router.get("/", (req, res) => {
   const user = req.session.user;
-  const files = fs.readdirSync(FILES_DIR).filter(f => f.endsWith(".docx"));
-  const fileLinks = files.length ? files.map(f => `<li><a href="/edit/${encodeURIComponent(f)}">${f}</a></li>`).join("") : "<li>No documents yet</li>";
+  const supportedExtensions = [".docx", ".xlsx", ".pptx"];
+  const files = fs
+    .readdirSync(FILES_DIR)
+    .filter((f) => supportedExtensions.some((ext) => f.endsWith(ext)));
+  const fileLinks = files.length
+    ? files
+        .map(
+          (f) => `<li><a href="/edit/${encodeURIComponent(f)}">${f}</a></li>`
+        )
+        .join("")
+    : "<li>No documents yet</li>";
 
   res.send(`<!DOCTYPE html><html><head><title>Waffle WOPI @ ${MIDDLEWARE_SERVER}</title>
     <style>
@@ -39,23 +42,27 @@ router.get("/", (req, res) => {
     <ul>${fileLinks}</ul>
 
     <h3>Create New Document</h3>
-    <form method="POST" action="/create">
-    <input type="text" name="filename" placeholder="Document name" required />
-    <input type="submit" value="Create" />
+    <form method="POST" id="createForm">
+      <input type="text" name="filename" placeholder="Document name" required />
+      <select name="filetype" id="filetype">
+        <option value="docx">Word (.docx)</option>
+        <option value="xlsx">Excel (.xlsx)</option>
+        <option value="pptx">PowerPoint (.pptx)</option>
+      </select>
+      <input type="submit" value="Create" />
     </form>
-
-    <h3>Rename Document</h3>
-    <form method="POST" action="/rename">
-      <input type="text" name="oldName" placeholder="Current filename (with .docx)" required />
-      <input type="text" name="newName" placeholder="New filename (without .docx)" required />
-      <input type="submit" value="Rename" />
-      </form>
+    <script>
+      document.getElementById('createForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const filetype = document.getElementById('filetype').value;
+        this.action = '/create/' + encodeURIComponent(filetype);
+        this.submit();
+      });
+    </script>
       </body></html>`);
 
-      // <a href="/settings?access_token=${user.access_token}&iframe_type=user" >User Settings</a> |
-      // <a href="/settings?access_token=${user.access_token}&iframe_type=admin" >Admin Settings</a>
-
-      //res.sendFile(path.join(__dirname, "../html/index.html"));
+  // <a href="/settings?access_token=${user.access_token}&iframe_type=user" >User Settings</a> |
+  // <a href="/settings?access_token=${user.access_token}&iframe_type=admin" >Admin Settings</a>
 });
 
 // Edit document with Collabora (WOPI)
@@ -64,7 +71,9 @@ router.get("/edit/:filename", (req, res) => {
   const filePath = path.join(FILES_DIR, fileId);
   if (!fs.existsSync(filePath)) return res.status(404).send("File not found");
   // server_url ends with ?
-  const wopiSrc = `WOPISrc=${MIDDLEWARE_SERVER}/wopi/files/${encodeURIComponent(fileId)}`;
+  const wopiSrc = `WOPISrc=${MIDDLEWARE_SERVER}/wopi/files/${encodeURIComponent(
+    fileId
+  )}`;
   let source = req.session.user.server_url + wopiSrc;
   res.send(`<!DOCTYPE html><html><head><title>Edit ${fileId} @ ${MIDDLEWARE_SERVER}</title>
     <style>
@@ -96,18 +105,18 @@ router.get("/edit/:filename", (req, res) => {
     </body></html>`);
 });
 
-router.get('/settings', (req, res) => {
-    // Example query parameters
-    const { access_token, iframe_type } = req.query;
+router.get("/settings", (req, res) => {
+  // Example query parameters
+  const { access_token, iframe_type } = req.query;
 
-    // iframe_type: "user" or "admin"
-    const type = iframe_type === 'admin' ? 'admin' : 'user';
+  // iframe_type: "user" or "admin"
+  const type = iframe_type === "admin" ? "admin" : "user";
 
-    // Build iframe URL (Collabora expects a POST normally, but can also be set via form)
+  // Build iframe URL (Collabora expects a POST normally, but can also be set via form)
   const iframeSrc = req.session.user.settings_url;
 
-    // HTML page with form post to Collabora iframe
-    const html = `
+  // HTML page with form post to Collabora iframe
+  const html = `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -137,41 +146,28 @@ html, body { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden;
 </html>
 `;
 
-    res.send(html);
+  res.send(html);
 });
 
-
-
 // Create new document
-router.post("/create", async (req, res) => {
+router.post("/create/:fileType", async (req, res) => {
   let { filename } = req.body;
-  filename = filename.replace(/[\/\\?%*:|"<>]/g, '').replace(/[ ]/g, '-') + ".docx";
+  filename =
+    filename.replace(/[\/\\?%*|"<>]/g, "").replace(/[ :]/g, "_") +
+    "." +
+    req.params.fileType;
   const filePath = path.join(FILES_DIR, filename);
 
-  if (fs.existsSync(filePath)) return res.send("File exists. <a href='/'>Back</a>");
+  if (fs.existsSync(filePath))
+    return res.send("Error: File exists. <a href='/'>Back</a>");
 
   try {
-    await createEmptyDocx(filePath);
+    await createEmptyFile(filePath, req.params.fileType, req.session.user.name);
     res.redirect(`/edit/${encodeURIComponent(filename)}`);
   } catch (err) {
     console.error(err);
     res.send("Error creating file. <a href='/'>Back</a>");
   }
-});
-
-// Rename document
-router.post("/rename", (req, res) => {
-  let { oldName, newName } = req.body;
-  newName = newName.replace(/[\/\\?%*:|"<>]/g, '').replace(/[ ]/g, '-') + ".docx";
-
-  const oldPath = path.join(FILES_DIR, oldName);
-  const newPath = path.join(FILES_DIR, newName);
-
-  if (!fs.existsSync(oldPath)) return res.send("Original file not found. <a href='/'>Back</a>");
-  if (fs.existsSync(newPath)) return res.send("Target filename exists. <a href='/'>Back</a>");
-
-  fs.renameSync(oldPath, newPath);
-  res.redirect("/");
 });
 
 module.exports = router;
