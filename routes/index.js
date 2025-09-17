@@ -18,7 +18,9 @@ router.get("/", (req, res) => {
   const fileLinks = files.length
     ? files
         .map(
-          (f) => `<li><a href="/edit/${encodeURIComponent(f)}">${f}</a></li>`
+          (f) => `<li><a href="/edit/${encodeURIComponent(f)}">${f}</a> ---
+            <button onclick="deleteFile('${encodeURIComponent(f)}')">Delete</button>
+          </li>`
         )
         .join("")
     : "<li>No documents yet</li>";
@@ -40,6 +42,8 @@ router.get("/", (req, res) => {
     <a href="/logout">Logout</a>
     <h2>Your Documents</h2>
     <ul>${fileLinks}</ul>
+
+<script src="/javascripts/deleteFile.js"></script>
 
     <h3>Create New Document</h3>
     <form method="POST" id="createForm">
@@ -103,6 +107,18 @@ router.get("/edit/:filename", (req, res) => {
     document.getElementById('collabora-submit-form').submit();
     </script>
     </body></html>`);
+});
+
+router.delete("/edit/:filename", async (req, res) => {
+  const fileId = req.params.filename;
+  const filePath = path.join(FILES_DIR, fileId);
+  try {
+    await fs.promises.unlink(filePath);
+    res.send("File deleted successfully.");
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Error deleting file.");
+  }
 });
 
 router.get("/settings", (req, res) => {

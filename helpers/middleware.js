@@ -58,7 +58,7 @@ function validateAccessToken(req, res, next) {
       return next();
     } catch (err2) {
       console.error("Invalid token:", err2.message);
-      return res.status(401).json({ error: "Invalid or expired access token" });
+      return res.redirect("/auth/login");
     }
   });
 }
@@ -67,10 +67,16 @@ function validateAccessToken(req, res, next) {
  * Middleware: login required
  */
 function requireLogin(req, res, next) {
+
+  if (req.cookies?.access_token) {
+    return validateAccessToken(req, res, next);
+  }
+
   if (!req.session.user) {
     req.session.redirectAfterLogin = req.originalUrl;
     return res.redirect("/auth/login");
   }
+
   next();
 }
 

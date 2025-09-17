@@ -70,6 +70,7 @@ router.get("/logout", (req, res) => {
     const logoutUrl = DEX_ISSUER ? (DEX_ISSUER.endsWith("/") ? `${DEX_ISSUER}logout` : `${DEX_ISSUER}/logout`) : "/";
     res.redirect("/");
   });
+  res.clearCookie('access_token', { httpOnly: true, secure: true, sameSite: 'lax' });
 });
 
 module.exports = router;
