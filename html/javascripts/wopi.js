@@ -27,6 +27,15 @@ function receiveMessage(event) {
                 url: current_graphics
             }
         });
+    } else if (msg.MessageId === "File_Rename") {
+        // Handle file rename event
+        if (msg.Values && msg.Values.NewName) {
+          console.log("File renamed to: " + msg.Values.NewName);
+          window.location.href = encodeURIComponent(msg.Values.NewName);
+        }
+    } else if (msg.MessageId === "UI_SaveAs") {
+      // Handle file rename even
+      alert("Save As is supported by editing the filename title for the document.");
     }
 
     console.log(msg.MessageId);

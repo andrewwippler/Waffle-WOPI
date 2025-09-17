@@ -79,7 +79,7 @@ router.get("/edit/:filename", (req, res) => {
     <input name="css_variables" value="" type="hidden" id="css-variables"/>
     <input name="lang" value="en_US" type="hidden" id="lang-form"/>
     <input name="closebutton" value="1" type="hidden" id="close-button-form"/>
-    <input name="ui_defaults" value="UIMode=tabbed;TextSidebar=true;" type="hidden" id="ui-defaults"/>
+    <input name="ui_defaults" value="UIMode=tabbed;TextSidebar=false;TextRuler=true;" type="hidden" id="ui-defaults"/>
     <input name="access_token" value="${req.session.user.access_token}" type="hidden" id="access-token"/>
     <input type="submit" value="" />
   </form>

@@ -21,6 +21,7 @@
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
     "officegen": "^0.6.5",
+    "utf7": "^1.0.1",
     "xpath": "0.0.34"
   },
   "license": "Apache",
