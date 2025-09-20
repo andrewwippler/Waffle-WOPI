@@ -239,7 +239,7 @@ router.post("/files/:fileId", (req, res) => {
       // Conflict
       return res.status(409).header("X-WOPI-Lock", locks[fileId].value).end();
     }
-    locks[fileId] = { value: lockValue, expires: Date.now() + 30 * 60 * 1000 }; // 30 min
+    locks[fileId] = { value: lockValue, expires: Date.now() + 108000 }; // 30 min
     return res.sendStatus(200);
   } else if (override === "UNLOCK") {
     const lockValue = req.header("X-WOPI-Lock");
@@ -264,7 +264,7 @@ router.post("/files/:fileId", (req, res) => {
         .header("X-WOPI-Lock", locks[fileId]?.value || "")
         .end();
     }
-    locks[fileId].expires = Date.now() + 30 * 60 * 1000;
+    locks[fileId].expires = Date.now() + 108000; // 30 min
     return res.sendStatus(200);
   } else if (override === "PUT_RELATIVE") {
     // Save As
@@ -297,7 +297,7 @@ router.post("/files/:fileId", (req, res) => {
         .header("X-WOPI-Lock", locks[fileId]?.value || "")
         .end();
     }
-    locks[fileId] = { value: newLock, expires: Date.now() + 30 * 60 * 1000 };
+    locks[fileId] = { value: newLock, expires: Date.now() + 108000 }; // 30 min
     return res.sendStatus(200);
   } else {
     res.status(400).json({ error: "Unsupported X-WOPI-Override" });
