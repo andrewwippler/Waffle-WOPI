@@ -76,47 +76,22 @@ router.get("/", (req, res) => {
 
     <h3>Create New</h3>
     <form method="POST" id="createForm">
-      <input type="text" id="nameInput" name="filename" placeholder="Name" required />
+      <input type="text" name="filename" placeholder="Name" required />
       <input type="hidden" name="currentpath" value="${relPath}" />
-      <label for="createKind">Type:</label>
-      <select id="createKind" name="createKind">
-        <option value="file">File</option>
-        <option value="folder">Folder</option>
-      </select>
       <select name="filetype" id="filetype">
         <option value="docx">Word (.docx)</option>
         <option value="xlsx">Excel (.xlsx)</option>
         <option value="pptx">PowerPoint (.pptx)</option>
+        <option value="folder">Folder</option>
       </select>
       <input type="submit" value="Create" />
     </form>
 
     <script>
-      const createForm = document.getElementById('createForm');
-      const kind = document.getElementById('createKind');
-      const filetype = document.getElementById('filetype');
-      const nameInput = document.getElementById('nameInput');
-
-      function updateFormForKind() {
-        if (kind.value === 'folder') {
-          filetype.style.display = 'none';
-          nameInput.name = 'foldername';
-        } else {
-          filetype.style.display = '';
-          nameInput.name = 'filename';
-        }
-      }
-
-      kind.addEventListener('change', updateFormForKind);
-      updateFormForKind();
-
-      createForm.addEventListener('submit', function(e) {
+      document.getElementById('createForm').addEventListener('submit', function(e) {
         e.preventDefault();
-        if (kind.value === 'folder') {
-          this.action = '/create-folder';
-        } else {
-          this.action = '/create/' + encodeURIComponent(filetype.value);
-        }
+        const filetype = document.getElementById('filetype').value;
+        this.action = '/create/' + encodeURIComponent(filetype);
         this.submit();
       });
     </script>
@@ -279,6 +254,7 @@ router.post("/create/:createType", async (req, res) => {
       try {
         await fs.promises.mkdir(dirPath, { recursive: true });
         res.redirect(`/?path=${encodeURIComponent(rel)}`);
+        return;
       } catch (err) {
         console.error(err);
         res.send("Error creating folder. <a href='/'>Back</a>");
@@ -295,7 +271,7 @@ router.post("/create/:createType", async (req, res) => {
   try {
     // ensure directory exists
     await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
-    await createEmptyFile(filePath, req.params.fileType, req.session.user.name);
+    await createEmptyFile(filePath, req.params.createType, req.session.user.name);
     const token = createFileToken(rel);
     res.redirect(`/edit?file=${encodeURIComponent(token)}`);
   } catch (err) {
