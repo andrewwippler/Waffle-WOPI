@@ -12,18 +12,39 @@ const { MIDDLEWARE_SERVER, FILES_DIR } = require("../helpers/vars.js");
 router.get("/", (req, res) => {
   const user = req.session.user;
   const supportedExtensions = [".docx", ".xlsx", ".pptx"];
-  const files = fs
-    .readdirSync(FILES_DIR)
-    .filter((f) => supportedExtensions.some((ext) => f.endsWith(ext)));
-  const fileLinks = files.length
-    ? files
-        .map(
-          (f) => `<li><a href="/edit/${encodeURIComponent(f)}">${f}</a> ---
-            <button onclick="deleteFile('${encodeURIComponent(f)}')">Delete</button>
-          </li>`
-        )
-        .join("")
-    : "<li>No documents yet</li>";
+
+  // Relative path within FILES_DIR (may be empty)
+  const relPath = req.query.path ? req.query.path : "";
+  const absDir = path.join(FILES_DIR, relPath);
+  const normBase = path.normalize(FILES_DIR + path.sep);
+  const normTarget = path.normalize(absDir + path.sep);
+  if (!normTarget.startsWith(normBase)) return res.status(400).send("Invalid path");
+
+  if (!fs.existsSync(absDir) || !fs.statSync(absDir).isDirectory()) {
+    return res.status(404).send("Directory not found");
+  }
+
+  const entries = fs.readdirSync(absDir);
+  const dirs = entries.filter((e) => fs.statSync(path.join(absDir, e)).isDirectory()).sort();
+  const files = entries.filter((e) => fs.statSync(path.join(absDir, e)).isFile() && supportedExtensions.some((ext) => e.endsWith(ext))).sort();
+
+  function joinRel(name) {
+    return relPath ? path.join(relPath, name).replace(/\\/g, "/") : name;
+  }
+
+  const fileLinks = `
+    ${dirs.length ? dirs.map(d => `<li>📁 <a href="/?path=${encodeURIComponent(joinRel(d))}">${d}</a> --- <button onclick="deleteFile('${encodeURIComponent(joinRel(d))}')">Delete</button></li>`).join('') : ''}
+    ${files.length ? files.map(f => `<li>📄 <a href="/edit?file=${encodeURIComponent(joinRel(f))}">${f}</a> --- <button onclick="deleteFile('${encodeURIComponent(joinRel(f))}')">Delete</button></li>`).join('') : ''}
+    ${dirs.length === 0 && files.length === 0 ? '<li>No documents yet</li>' : ''}
+  `;
+
+  // Breadcrumbs
+  const parts = relPath ? relPath.split(/[\\/]/).filter(Boolean) : [];
+  let crumbPath = "";
+  const breadcrumbs = ['<a href="/">Home</a>'].concat(parts.map(p => {
+    crumbPath = crumbPath ? `${crumbPath}/${p}` : p;
+    return `<a href="/?path=${encodeURIComponent(crumbPath)}">${p}</a>`;
+  })).join(' / ');
 
   res.send(`<!DOCTYPE html><html><head><title>Waffle WOPI @ ${MIDDLEWARE_SERVER}</title>
     <style>
@@ -41,20 +62,24 @@ router.get("/", (req, res) => {
     <h1>Welcome, ${user.name}</h1>
     <a href="/logout">Logout</a>
     <h2>Your Documents</h2>
+    <div>Path: ${breadcrumbs}</div>
     <ul>${fileLinks}</ul>
 
 <script src="/javascripts/deleteFile.js"></script>
 
     <h3>Create New Document</h3>
     <form method="POST" id="createForm">
-      <input type="text" name="filename" placeholder="Document name" required />
+      <input type="text" name="filename" placeholder="Name" required />
+      <input type="hidden" name="currentpath" value="${relPath}" />
       <select name="filetype" id="filetype">
         <option value="docx">Word (.docx)</option>
         <option value="xlsx">Excel (.xlsx)</option>
         <option value="pptx">PowerPoint (.pptx)</option>
+        <option value="folder">Folder</option>
       </select>
       <input type="submit" value="Create" />
     </form>
+
     <script>
       document.getElementById('createForm').addEventListener('submit', function(e) {
         e.preventDefault();
@@ -64,16 +89,20 @@ router.get("/", (req, res) => {
       });
     </script>
       </body></html>`);
-
-  // <a href="/settings?access_token=${user.access_token}&iframe_type=user" >User Settings</a> |
-  // <a href="/settings?access_token=${user.access_token}&iframe_type=admin" >Admin Settings</a>
 });
 
+// <a href="/settings?access_token=${user.access_token}&iframe_type=user" >User Settings</a> |
+// <a href="/settings?access_token=${user.access_token}&iframe_type=admin" >Admin Settings</a>
+
 // Edit document with Collabora (WOPI)
-router.get("/edit/:filename", (req, res) => {
-  const fileId = req.params.filename;
+router.get("/edit", (req, res) => {
+  const fileId = req.query.file;
+  if (!fileId) return res.status(400).send("Missing file parameter");
   const filePath = path.join(FILES_DIR, fileId);
-  if (!fs.existsSync(filePath)) return res.status(404).send("File not found");
+  const normBase = path.normalize(FILES_DIR + path.sep);
+  const normFile = path.normalize(filePath);
+  if (!normFile.startsWith(path.normalize(FILES_DIR))) return res.status(400).send("Invalid file");
+  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return res.status(404).send("File not found");
   // server_url ends with ?
   const wopiSrc = `WOPISrc=${MIDDLEWARE_SERVER}/wopi/files/${encodeURIComponent(
     fileId
@@ -109,15 +138,47 @@ router.get("/edit/:filename", (req, res) => {
     </body></html>`);
 });
 
-router.delete("/edit/:filename", async (req, res) => {
-  const fileId = req.params.filename;
+router.delete("/edit", async (req, res) => {
+  const fileId = req.query.file;
+  if (!fileId) return res.status(400).json({ error: 'Missing file parameter' });
   const filePath = path.join(FILES_DIR, fileId);
+  const normFile = path.normalize(filePath);
+  if (!normFile.startsWith(path.normalize(FILES_DIR))) return res.status(400).json({ error: 'Invalid path' });
   try {
+    const stat = await fs.promises.stat(filePath);
+    if (stat.isDirectory()) {
+      // check if directory is empty (recursively count entries)
+      async function countEntries(dir) {
+        let count = 0;
+        const items = await fs.promises.readdir(dir);
+        for (const it of items) {
+          count += 1;
+          const p = path.join(dir, it);
+          const s = await fs.promises.stat(p);
+          if (s.isDirectory()) {
+            count += await countEntries(p);
+          }
+        }
+        return count;
+      }
+
+      const total = await countEntries(filePath);
+      // If non-empty and no explicit confirm, ask client to confirm
+      if (total > 0 && req.query.confirm !== '1') {
+        return res.status(409).json({ error: 'Directory not empty', needsConfirmation: true, entries: total });
+      }
+      // proceed to remove (confirmed or empty)
+      await fs.promises.rm(filePath, { recursive: true, force: true });
+      return res.send("Deleted successfully.");
+    }
+
+    // it's a file, delete directly
     await fs.promises.unlink(filePath);
-    res.send("File deleted successfully.");
+    res.send("Deleted successfully.");
   } catch (err) {
+    if (err.code === 'ENOENT') return res.status(404).json({ error: 'Not found' });
     console.error(err);
-    res.status(500).send("Error deleting file.");
+    res.status(500).json({ error: 'Error deleting' });
   }
 });
 
@@ -166,20 +227,37 @@ html, body { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden;
 });
 
 // Create new document
-router.post("/create/:fileType", async (req, res) => {
-  let { filename } = req.body;
-  filename =
-    filename.replace(/[\/\\?%*|"<>]/g, "").replace(/[ :]/g, "_") +
-    "." +
-    req.params.fileType;
-  const filePath = path.join(FILES_DIR, filename);
+router.post("/create/:createType", async (req, res) => {
+  let { filename, currentpath } = req.body;
+  currentpath = currentpath || "";
+  const sanitizedName = filename.replace(/[\/\\?%*|"<>]/g, "").replace(/[ :]/g, "_");
 
-  if (fs.existsSync(filePath))
-    return res.send("Error: File exists. <a href='/'>Back</a>");
+  if (req.params.createType === "folder") {
+      const rel = currentpath ? path.join(currentpath, sanitizedName) : sanitizedName;
+      const dirPath = path.join(FILES_DIR, rel);
+      const normDir = path.normalize(dirPath);
+      if (!normDir.startsWith(path.normalize(FILES_DIR))) return res.send("Invalid path");
+      try {
+        await fs.promises.mkdir(dirPath, { recursive: true });
+        res.redirect(`/?path=${encodeURIComponent(rel)}`);
+      } catch (err) {
+        console.error(err);
+        res.send("Error creating folder. <a href='/'>Back</a>");
+      }
+  }
+  filename = sanitizedName + "." + req.params.createType;
+  const rel = currentpath ? path.join(currentpath, filename) : filename;
+  const filePath = path.join(FILES_DIR, rel);
+  const normFile = path.normalize(filePath);
+  if (!normFile.startsWith(path.normalize(FILES_DIR))) return res.send("Invalid path");
+
+  if (fs.existsSync(filePath)) return res.send("Error: File exists. <a href='/'>Back</a>");
 
   try {
+    // ensure directory exists
+    await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
     await createEmptyFile(filePath, req.params.fileType, req.session.user.name);
-    res.redirect(`/edit/${encodeURIComponent(filename)}`);
+    res.redirect(`/edit?file=${encodeURIComponent(rel)}`);
   } catch (err) {
     console.error(err);
     res.send("Error creating file. <a href='/'>Back</a>");
