@@ -8,7 +8,9 @@ const jwt = require('jsonwebtoken');
 
 const { createAccessToken } = require("../helpers/middleware.js");
 
-const {DEX_ISSUER, CLIENT_ID, CLIENT_SECRET, DOCUMENTSERVER_URL, MIDDLEWARE_SERVER } = require("../helpers/vars.js");
+const {DEX_ISSUER, CLIENT_ID, CLIENT_SECRET, DOCUMENTSERVER_URL, MIDDLEWARE_SERVER, NODE_ENV } = require("../helpers/vars.js");
+
+const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // Dex login
 router.get("/login", (req, res) => {
@@ -56,7 +58,7 @@ router.get("/callback", async (req, res) => {
     };
 
     const token = createAccessToken(req.session.user, null);
-    res.cookie('access_token', token, { httpOnly: true, secure: true, sameSite: 'lax' });
+    res.cookie('access_token', token, { httpOnly: true, secure: NODE_ENV === "production", sameSite: 'lax', maxAge: COOKIE_MAX_AGE });
     res.redirect(req.session.redirectAfterLogin || '/');
   } catch (err) {
     console.error("Callback error:", err.response?.data || err.message);
@@ -70,7 +72,7 @@ router.get("/logout", (req, res) => {
     const logoutUrl = DEX_ISSUER ? (DEX_ISSUER.endsWith("/") ? `${DEX_ISSUER}logout` : `${DEX_ISSUER}/logout`) : "/";
     res.redirect("/");
   });
-  res.clearCookie('access_token', { httpOnly: true, secure: true, sameSite: 'lax' });
+  res.clearCookie('access_token', { httpOnly: true, secure: NODE_ENV === "production", sameSite: 'lax' });
 });
 
 module.exports = router;
