@@ -6,6 +6,7 @@ const fs = require("fs");
 const path = require("path");
 
 const { createEmptyFile } = require("../helpers/files.js");
+const { createFileToken, decodeFileToken } = require("../helpers/filetoken.js");
 
 const { MIDDLEWARE_SERVER, FILES_DIR } = require("../helpers/vars.js");
 
@@ -33,8 +34,14 @@ router.get("/", (req, res) => {
   }
 
   const fileLinks = `
-    ${dirs.length ? dirs.map(d => `<li>📁 <a href="/?path=${encodeURIComponent(joinRel(d))}">${d}</a> --- <button onclick="deleteFile('${encodeURIComponent(joinRel(d))}')">Delete</button></li>`).join('') : ''}
-    ${files.length ? files.map(f => `<li>📄 <a href="/edit?file=${encodeURIComponent(joinRel(f))}">${f}</a> --- <button onclick="deleteFile('${encodeURIComponent(joinRel(f))}')">Delete</button></li>`).join('') : ''}
+    ${dirs.length ? dirs.map(d => {
+      const token = createFileToken(joinRel(d));
+      return `<li>📁 <a href="/?path=${encodeURIComponent(joinRel(d))}">${d}</a> --- <button onclick="deleteFile('${encodeURIComponent(token)}')">Delete</button></li>`
+    }).join('') : ''}
+    ${files.length ? files.map(f => {
+      const token = createFileToken(joinRel(f));
+      return `<li>📄 <a href="/edit?file=${encodeURIComponent(token)}">${f}</a> --- <button onclick="deleteFile('${encodeURIComponent(token)}')">Delete</button></li>`
+    }).join('') : ''}
     ${dirs.length === 0 && files.length === 0 ? '<li>No documents yet</li>' : ''}
   `;
 
@@ -67,24 +74,49 @@ router.get("/", (req, res) => {
 
 <script src="/javascripts/deleteFile.js"></script>
 
-    <h3>Create New Document</h3>
+    <h3>Create New</h3>
     <form method="POST" id="createForm">
-      <input type="text" name="filename" placeholder="Name" required />
+      <input type="text" id="nameInput" name="filename" placeholder="Name" required />
       <input type="hidden" name="currentpath" value="${relPath}" />
+      <label for="createKind">Type:</label>
+      <select id="createKind" name="createKind">
+        <option value="file">File</option>
+        <option value="folder">Folder</option>
+      </select>
       <select name="filetype" id="filetype">
         <option value="docx">Word (.docx)</option>
         <option value="xlsx">Excel (.xlsx)</option>
         <option value="pptx">PowerPoint (.pptx)</option>
-        <option value="folder">Folder</option>
       </select>
       <input type="submit" value="Create" />
     </form>
 
     <script>
-      document.getElementById('createForm').addEventListener('submit', function(e) {
+      const createForm = document.getElementById('createForm');
+      const kind = document.getElementById('createKind');
+      const filetype = document.getElementById('filetype');
+      const nameInput = document.getElementById('nameInput');
+
+      function updateFormForKind() {
+        if (kind.value === 'folder') {
+          filetype.style.display = 'none';
+          nameInput.name = 'foldername';
+        } else {
+          filetype.style.display = '';
+          nameInput.name = 'filename';
+        }
+      }
+
+      kind.addEventListener('change', updateFormForKind);
+      updateFormForKind();
+
+      createForm.addEventListener('submit', function(e) {
         e.preventDefault();
-        const filetype = document.getElementById('filetype').value;
-        this.action = '/create/' + encodeURIComponent(filetype);
+        if (kind.value === 'folder') {
+          this.action = '/create-folder';
+        } else {
+          this.action = '/create/' + encodeURIComponent(filetype.value);
+        }
         this.submit();
       });
     </script>
@@ -96,19 +128,20 @@ router.get("/", (req, res) => {
 
 // Edit document with Collabora (WOPI)
 router.get("/edit", (req, res) => {
-  const fileId = req.query.file;
-  if (!fileId) return res.status(400).send("Missing file parameter");
-  const filePath = path.join(FILES_DIR, fileId);
-  const normBase = path.normalize(FILES_DIR + path.sep);
-  const normFile = path.normalize(filePath);
-  if (!normFile.startsWith(path.normalize(FILES_DIR))) return res.status(400).send("Invalid file");
+  const token = req.query.file;
+  if (!token) return res.status(400).send("Missing file parameter");
+  let rel;
+  try {
+    rel = decodeFileToken(token);
+  } catch (e) {
+    return res.status(400).send("Invalid file token");
+  }
+  const filePath = path.join(FILES_DIR, rel);
   if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return res.status(404).send("File not found");
   // server_url ends with ?
-  const wopiSrc = `WOPISrc=${MIDDLEWARE_SERVER}/wopi/files/${encodeURIComponent(
-    fileId
-  )}`;
+  const wopiSrc = `WOPISrc=${MIDDLEWARE_SERVER}/wopi/files/${encodeURIComponent(token)}`;
   let source = req.session.user.server_url + wopiSrc;
-  res.send(`<!DOCTYPE html><html><head><title>Edit ${fileId} @ ${MIDDLEWARE_SERVER}</title>
+  res.send(`<!DOCTYPE html><html><head><title>Edit ${path.basename(rel)} @ ${MIDDLEWARE_SERVER}</title>
     <style>
       html, body { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
       #collabora-online-viewer { border: none; width: 100%; height: 100vh; }
@@ -139,9 +172,15 @@ router.get("/edit", (req, res) => {
 });
 
 router.delete("/edit", async (req, res) => {
-  const fileId = req.query.file;
-  if (!fileId) return res.status(400).json({ error: 'Missing file parameter' });
-  const filePath = path.join(FILES_DIR, fileId);
+  const token = req.query.file;
+  if (!token) return res.status(400).json({ error: 'Missing file parameter' });
+  let rel;
+  try {
+    rel = decodeFileToken(token);
+  } catch (e) {
+    return res.status(400).json({ error: 'Invalid token' });
+  }
+  const filePath = path.join(FILES_DIR, rel);
   const normFile = path.normalize(filePath);
   if (!normFile.startsWith(path.normalize(FILES_DIR))) return res.status(400).json({ error: 'Invalid path' });
   try {
@@ -257,7 +296,8 @@ router.post("/create/:createType", async (req, res) => {
     // ensure directory exists
     await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
     await createEmptyFile(filePath, req.params.fileType, req.session.user.name);
-    res.redirect(`/edit?file=${encodeURIComponent(rel)}`);
+    const token = createFileToken(rel);
+    res.redirect(`/edit?file=${encodeURIComponent(token)}`);
   } catch (err) {
     console.error(err);
     res.send("Error creating file. <a href='/'>Back</a>");

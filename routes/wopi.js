@@ -21,6 +21,7 @@ const {
 } = require("../helpers/vars.js");
 
 const { listSettingsFiles } = require("../helpers/files.js");
+const { createFileToken, decodeFileToken } = require("../helpers/filetoken.js");
 
 const locks = {}; // { fileId: { value: string, expires: number } }
 
@@ -35,7 +36,13 @@ const locks = {}; // { fileId: { value: string, expires: number } }
  */
 router.get("/files/:fileId", function (req, res) {
   console.log("file id: " + req.params.fileId);
-  const filepath = path.join(FILES_DIR, req.params.fileId);
+  let rel;
+  try {
+    rel = decodeFileToken(req.params.fileId);
+  } catch (e) {
+    return res.status(400).json({ error: 'Invalid file token' });
+  }
+  const filepath = path.join(FILES_DIR, rel);
 
   if (!fs.existsSync(filepath)) {
     return res.status(404).json({ error: "File not found" });
@@ -43,7 +50,7 @@ router.get("/files/:fileId", function (req, res) {
 
   const stats = fs.statSync(filepath);
   const json = {
-    BaseFileName: req.params.fileId,
+    BaseFileName: path.basename(rel),
     Size: stats.size,
     UserFriendlyName: req.wopi.name,
     UserCanWrite: req.wopi.canWrite,
@@ -68,7 +75,13 @@ router.get("/files/:fileId", function (req, res) {
  */
 router.get("/files/:fileId/contents", function (req, res) {
   // send back the file content as response
-  const filepath = path.join(FILES_DIR, req.params.fileId);
+  let rel;
+  try {
+    rel = decodeFileToken(req.params.fileId);
+  } catch (e) {
+    return res.status(400).json({ error: 'Invalid file token' });
+  }
+  const filepath = path.join(FILES_DIR, rel);
   if (!fs.existsSync(filepath)) {
     return res.status(404).json({ error: "File not found" });
   }
@@ -88,7 +101,13 @@ router.post("/files/:fileId/contents", function (req, res) {
     return res.status(403).json({ error: "Read-only access" });
   }
 
-  const filepath = path.join(FILES_DIR, req.params.fileId);
+  let rel;
+  try {
+    rel = decodeFileToken(req.params.fileId);
+  } catch (e) {
+    return res.status(400).json({ error: 'Invalid file token' });
+  }
+  const filepath = path.join(FILES_DIR, rel);
 
   if (req.body) {
     fs.writeFileSync(filepath, req.body);
@@ -231,6 +250,12 @@ router.post("/settings/upload", upload.single("file"), (req, res) => {
  */
 router.post("/files/:fileId", (req, res) => {
   const fileId = req.params.fileId;
+  let rel;
+  try {
+    rel = decodeFileToken(fileId);
+  } catch (e) {
+    return res.status(400).json({ error: 'Invalid file token' });
+  }
   const override = req.header("X-WOPI-Override");
   console.log("X-WOPI-Override:", override, " for fileId:", fileId);
   if (override === "LOCK") {
@@ -266,7 +291,7 @@ router.post("/files/:fileId", (req, res) => {
     }
     locks[fileId].expires = Date.now() + 108000; // 30 min
     return res.sendStatus(200);
-  } else if (override === "PUT_RELATIVE") {
+    } else if (override === "PUT_RELATIVE") {
     // Save As
     const suggestedTarget = utf7.decode(req.header("X-WOPI-SuggestedTarget") || "");
     const newFileName = suggestedTarget.replace(/^\.?/, ""); // Remove leading dot if present
@@ -274,19 +299,19 @@ router.post("/files/:fileId", (req, res) => {
     fs.writeFileSync(newFilePath, req.body);
     res.json({
       Name: newFileName,
-      Url: `https://${MIDDLEWARE_SERVER}/wopi/files/${encodeURIComponent(newFileName)}?access_token=${req.query.access_token}`,
+      Url: `https://${MIDDLEWARE_SERVER}/wopi/files/${encodeURIComponent(createFileToken(newFileName))}?access_token=${req.query.access_token}`,
     });
   } else if (override === "RENAME_FILE") {
     // Rename
     const requestedName = utf7.decode(req.header("X-WOPI-RequestedName") || "");
-    const ext = path.extname(req.params.fileId);
+    const ext = path.extname(rel);
     const newFileName = requestedName + ext;
-    const oldPath = path.join(FILES_DIR, req.params.fileId);
+    const oldPath = path.join(FILES_DIR, rel);
     const newPath = path.join(FILES_DIR, newFileName);
     fs.renameSync(oldPath, newPath);
     res.json({
       Name: newFileName,
-      Url: `https://${MIDDLEWARE_SERVER}/wopi/files/${encodeURIComponent(newFileName)}?access_token=${req.query.access_token}`,
+      Url: `https://${MIDDLEWARE_SERVER}/wopi/files/${encodeURIComponent(createFileToken(newFileName))}?access_token=${req.query.access_token}`,
     });
   } else if (override === "UNLOCK_AND_RELOCK") {
     const oldLock = req.header("X-WOPI-OldLock");
