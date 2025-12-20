@@ -8,7 +8,39 @@ const path = require("path");
 const { createEmptyFile } = require("../helpers/files.js");
 const { createFileToken, decodeFileToken } = require("../helpers/filetoken.js");
 
-const { MIDDLEWARE_SERVER, FILES_DIR } = require("../helpers/vars.js");
+const { MIDDLEWARE_SERVER, FILES_DIR, NODE_ENV } = require("../helpers/vars.js");
+const TOKEN_ENDPOINT = process.env.OAUTH_TOKEN_URL;
+const CLIENT_ID = process.env.OAUTH_CLIENT_ID;
+const CLIENT_SECRET = process.env.OAUTH_CLIENT_SECRET;
+
+function isTokenExpiring(token, leeway = 60) {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
+    return !payload.exp || (payload.exp - leeway) <= Math.floor(Date.now() / 1000);
+  } catch (e) {
+    return true;
+  }
+}
+
+async function refreshAccessToken(req) {
+  const refresh = req.session.user && req.session.user.refresh_token;
+  if (!refresh) throw new Error('no refresh token available');
+  const params = new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refresh, client_id: CLIENT_ID });
+  if (CLIENT_SECRET) params.set('client_secret', CLIENT_SECRET);
+  const resp = await fetch(TOKEN_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: params.toString() });
+  if (!resp.ok) throw new Error('token refresh failed: ' + resp.status);
+  const data = await resp.json();
+  req.session.user.access_token = data.access_token;
+  if (data.refresh_token) req.session.user.refresh_token = data.refresh_token;
+  if (data.server_url) req.session.user.server_url = data.server_url;
+}
+
+async function ensureValidToken(req) {
+  if (!req.session || !req.session.user || !req.session.user.access_token) return;
+  if (isTokenExpiring(req.session.user.access_token)) {
+    try { await refreshAccessToken(req); } catch (e) { console.error('token refresh error', e); }
+  }
+}
 
 router.get("/", (req, res) => {
   const user = req.session.user;
@@ -102,7 +134,8 @@ router.get("/", (req, res) => {
 // <a href="/settings?access_token=${user.access_token}&iframe_type=admin" >Admin Settings</a>
 
 // Edit document with Collabora (WOPI)
-router.get("/edit", (req, res) => {
+router.get("/edit", async (req, res) => {
+  await ensureValidToken(req);
   const token = req.query.file;
   if (!token) return res.status(400).send("Missing file parameter");
   let rel;
@@ -196,7 +229,8 @@ router.delete("/edit", async (req, res) => {
   }
 });
 
-router.get("/settings", (req, res) => {
+router.get("/settings", async (req, res) => {
+  await ensureValidToken(req);
   // Example query parameters
   const { access_token, iframe_type } = req.query;
 
@@ -277,6 +311,19 @@ router.post("/create/:createType", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.send("Error creating file. <a href='/'>Back</a>");
+  }
+});
+
+// Logout route for UI link
+router.get('/logout', (req, res) => {
+  try {
+    req.session.destroy(() => {
+      res.clearCookie('access_token', { httpOnly: true, secure: NODE_ENV === 'production', sameSite: 'lax' });
+      res.redirect('/');
+    });
+  } catch (e) {
+    res.clearCookie('access_token', { httpOnly: true, secure: NODE_ENV === 'production', sameSite: 'lax' });
+    res.redirect('/');
   }
 });
 
