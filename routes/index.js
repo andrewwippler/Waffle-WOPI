@@ -148,7 +148,7 @@ router.get("/edit", async (req, res) => {
   if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return res.status(404).send("File not found");
   // server_url ends with ?
   const wopiSrc = `WOPISrc=${MIDDLEWARE_SERVER}/wopi/files/${encodeURIComponent(token)}`;
-  let source = req.session.user.server_url + wopiSrc;
+  let source = req.session.user.server_url + encodeURIComponent(wopiSrc); // this needs to be URL-encoded
   res.send(`<!DOCTYPE html><html><head><title>Edit ${path.basename(rel)} @ ${MIDDLEWARE_SERVER}</title>
     <style>
       html, body { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
