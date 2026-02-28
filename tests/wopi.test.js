@@ -365,13 +365,13 @@ describe("WOPI Routes", () => {
         .expect(400, done);
     });
 
-    it("should return 500 for multer error - known limitation", (done) => {
+    it("should upload settings file successfully", (done) => {
       const fileId = `settings/userconfig/test-${Date.now()}.txt`;
       agent
         .post("/wopi/settings/upload")
         .query({ access_token: accessToken, fileId })
         .attach("file", path.join(__dirname, "fixtures", "test.txt"))
-        .expect(500, done);
+        .expect(200, done);
     });
   });
 });
