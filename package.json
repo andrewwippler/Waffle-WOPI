@@ -19,7 +19,7 @@
     "jsonwebtoken": "^9.0.3",
     "jwks-rsa": "^4.0.0",
     "morgan": "^1.10.1",
-    "multer": "^2.0.2",
+    "multer": "^2.1.0",
     "officegen": "^0.6.5",
     "utf7": "^1.0.1",
     "xpath": "0.0.34"
