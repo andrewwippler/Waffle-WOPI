@@ -1,5 +1,8 @@
 # Collabora Office WOPI Server
 
+[![Tests](https://github.com/collabora/collabora-middleware/actions/workflows/test.yml/badge.svg)](https://github.com/collabora/collabora-middleware/actions/workflows/test.yml)
+[![codecov](https://codecov.io/gh/collabora/collabora-middleware/branch/main/graph/badge.svg)](https://codecov.io/gh/collabora/collabora-middleware)
+
 A small WOPI server implementation for editing and viewing office (.docx) documents. Supports access to the same files (note: no file level security is implemented. Every user has access to the same files. Guest Access is not allowed.)
 
 ## Requirements
