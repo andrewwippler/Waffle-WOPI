@@ -1,6 +1,6 @@
 {
   "name": "collabora-online-integration-middleware",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "An application from the Collabora Online Integration Example developed by Andrew Wippler",
   "scripts": {
@@ -39,7 +39,7 @@
     "eslint": "^10.0.2",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.5",
-    "mocha": "^11.7.5",
+    "mocha": "^11.3.0",
     "nock": "^14.0.11",
     "nodemon": "^3.1.14",
     "prettier": "^3.8.1",

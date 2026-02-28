@@ -207,32 +207,42 @@ router.get("/settings", (req, res) => {
 // TODO: Save settings to files
 // e.g. settings/userconfig/xcu/paragraphStyles.xcu
 // e.g. settings/systemconfig/xcu/defaultStyles.xcu
-router.post("/settings/upload", upload.single("file"), (req, res) => {
-  const { fileId } = req.query;
+router.post("/settings/upload", (req, res) => {
+  upload.single("file")(req, res, function (err) {
+    if (err) {
+      return res.status(500).json({ error: "File upload failed", details: err.message });
+    }
 
-  if (!fileId || !req.file) {
-    return res.status(400).json({ error: "Missing fileId or file" });
-  }
+    const { fileId } = req.query;
 
-  // Build target path
-  const parts = fileId.split("/").filter(Boolean); // remove empty strings
-  // parts = ["settings", "userconfig", "xcu", "paragraphStyles.xcu"]
-  const targetDir = path.join(SETTINGS_DIR, ...parts.slice(0, -1));
-  const targetPath = path.join(targetDir, parts[parts.length - 1]);
+    if (!fileId || !req.file) {
+      return res.status(400).json({ error: "Missing fileId or file" });
+    }
 
-  fs.mkdirSync(targetDir, { recursive: true });
-  fs.renameSync(req.file.path, targetPath);
+    // Build target path
+    const parts = fileId.split("/").filter(Boolean); // remove empty strings
+    // parts = ["settings", "userconfig", "xcu", "paragraphStyles.xcu"]
+    const targetDir = path.join(SETTINGS_DIR, ...parts.slice(0, -1));
+    const targetPath = path.join(targetDir, parts[parts.length - 1]);
 
-  // Generate new stamp (simple example: timestamp)
-  const newStamp = Date.now().toString();
+    try {
+      fs.mkdirSync(targetDir, { recursive: true });
+      fs.renameSync(req.file.path, targetPath);
+    } catch (fsErr) {
+      return res.status(500).json({ error: "Failed to save file", details: fsErr.message });
+    }
 
-  res.json({
-    status: "success",
-    filename: parts[parts.length - 1],
-    details: {
-      stamp: newStamp,
-      uri: `https://${MIDDLEWARE_SERVER}/${fileId}`,
-    },
+    // Generate new stamp (simple example: timestamp)
+    const newStamp = Date.now().toString();
+
+    res.json({
+      status: "success",
+      filename: parts[parts.length - 1],
+      details: {
+        stamp: newStamp,
+        uri: `https://${MIDDLEWARE_SERVER}/${fileId}`,
+      },
+    });
   });
 });
 
