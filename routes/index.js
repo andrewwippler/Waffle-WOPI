@@ -8,10 +8,14 @@ const path = require("path");
 const { createEmptyFile } = require("../helpers/files.js");
 const { createFileToken, decodeFileToken } = require("../helpers/filetoken.js");
 
-const { MIDDLEWARE_SERVER, FILES_DIR, NODE_ENV } = require("../helpers/vars.js");
-const TOKEN_ENDPOINT = process.env.OAUTH_TOKEN_URL;
-const CLIENT_ID = process.env.OAUTH_CLIENT_ID;
-const CLIENT_SECRET = process.env.OAUTH_CLIENT_SECRET;
+const {
+  MIDDLEWARE_SERVER,
+  FILES_DIR,
+  NODE_ENV,
+  CLIENT_ID,
+  CLIENT_SECRET,
+  TOKEN_ENDPOINT,
+} = require("../helpers/vars.js");
 
 function isTokenExpiring(token, leeway = 60) {
   try {
@@ -47,15 +51,24 @@ async function refreshAccessToken(req) {
   if (data.server_url) req.session.user.server_url = data.server_url;
 }
 
-async function ensureValidToken(req) {
-  if (!req.session || !req.session.user || !req.session.user.access_token) return;
+async function ensureValidToken(req, res) {
+  if (!req.session || !req.session.user || !req.session.user.access_token) return false;
   if (isTokenExpiring(req.session.user.access_token)) {
     try {
       await refreshAccessToken(req);
     } catch (e) {
       console.error("token refresh error", e);
+      req.session.destroy((err) => {
+        res.clearCookie("access_token", {
+          httpOnly: true,
+          secure: NODE_ENV === "production",
+          sameSite: "lax",
+        });
+      });
+      return true;
     }
   }
+  return false;
 }
 
 router.get("/", (req, res) => {
@@ -173,7 +186,8 @@ router.get("/", (req, res) => {
 
 // Edit document with Collabora (WOPI)
 router.get("/edit", async (req, res) => {
-  await ensureValidToken(req);
+  const expired = await ensureValidToken(req, res);
+  if (expired) return res.redirect("/session-expired");
   const token = req.query.file;
   if (!token) return res.status(400).send("Missing file parameter");
   let rel;
@@ -272,7 +286,8 @@ router.delete("/edit", async (req, res) => {
 });
 
 router.get("/settings", async (req, res) => {
-  await ensureValidToken(req);
+  const expired = await ensureValidToken(req, res);
+  if (expired) return res.redirect("/session-expired");
   // Example query parameters
   const { access_token, iframe_type } = req.query;
 
@@ -354,6 +369,21 @@ router.post("/create/:createType", async (req, res) => {
     console.error(err);
     res.send("Error creating file. <a href='/'>Back</a>");
   }
+});
+
+// Session expired page
+router.get("/session-expired", (req, res) => {
+  res.send(`<!DOCTYPE html><html><head><title>Session Expired</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 20px; }
+      h1 { color: #333; }
+      a { text-decoration: none; color: #007BFF; }
+      a:hover { text-decoration: underline; }
+    </style>
+    </head><body>
+    <h1>Session Expired</h1>
+    <p>Your session has expired. Please <a href="/auth/login">log in again</a>.</p>
+  </body></html>`);
 });
 
 // Logout route for UI link

@@ -45,6 +45,7 @@ router.get("/callback", async (req, res) => {
     );
 
     const idToken = tokenResp.data.id_token;
+    const refreshToken = tokenResp.data.refresh_token;
     if (!idToken) return res.status(500).send("No id_token received");
     const server_url = await axios.get(
       `${MIDDLEWARE_SERVER}/wopi/collaboraUrl?server=` +
@@ -63,6 +64,7 @@ router.get("/callback", async (req, res) => {
       id: userInfo.sub,
       email: userInfo.email,
       access_token: idToken,
+      refresh_token: refreshToken,
       server_url: server_url.data.url,
       settings_url: server_url.data.settings,
       name: userInfo.name || userInfo.preferred_username || userInfo.email || "Unnamed User",
