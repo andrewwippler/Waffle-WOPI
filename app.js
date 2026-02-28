@@ -4,6 +4,7 @@ let express = require("express");
 let path = require("path");
 let logger = require("morgan");
 let bodyParser = require("body-parser");
+let cookieParser = require("cookie-parser");
 const fs = require("fs");
 const session = require("express-session");
 // officegen is used in helpers/files.js
@@ -62,6 +63,8 @@ app.use(
     },
   })
 );
+
+app.use(cookieParser());
 
 // Files directory
 if (!fs.existsSync(FILES_DIR)) fs.mkdirSync(FILES_DIR, { recursive: true });

@@ -40,7 +40,7 @@ function validateAccessToken(req, res, next) {
     return res.status(401).json({ error: "Missing access token" });
   }
 
-  // Try RS256 (Dex) first, fallback to local secret
+  // Try RS256 (Dex) first
   jwt.verify(token, getKey, { algorithms: ["RS256"] }, (err, decoded) => {
     if (!err) {
       req.wopi = decoded;
@@ -52,7 +52,7 @@ function validateAccessToken(req, res, next) {
     try {
       req.wopi = jwt.verify(token, JWT_SECRET);
       req.wopi.canWrite = true;
-      req.wopi.isAdminUser = decoded.name === SUPER_ADMIN_USER;
+      req.wopi.isAdminUser = req.wopi.name === SUPER_ADMIN_USER;
       return next();
     } catch (err2) {
       console.error("Invalid token:", err2.message);
@@ -65,16 +65,20 @@ function validateAccessToken(req, res, next) {
  * Middleware: login required
  */
 function requireLogin(req, res, next) {
+  if (req.wopi) {
+    return next();
+  }
+
   if (req.cookies?.access_token) {
     return validateAccessToken(req, res, next);
   }
 
-  if (!req.session.user) {
-    req.session.redirectAfterLogin = req.originalUrl;
-    return res.redirect("/auth/login");
+  if (req.session?.user) {
+    return next();
   }
 
-  next();
+  req.session.redirectAfterLogin = req.originalUrl;
+  return res.redirect("/auth/login");
 }
 
 module.exports = {
