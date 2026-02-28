@@ -1,0 +1,2 @@
+Hello World Test Document
+This is a test file for the WOPI middleware.

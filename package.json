@@ -1,11 +1,18 @@
 {
   "name": "collabora-online-integration-middleware",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "An application from the Collabora Online Integration Example developed by Andrew Wippler",
   "scripts": {
     "start": "node ./bin/www",
-    "dev": "nodemon ./bin/www"
+    "dev": "nodemon ./bin/www",
+    "test": "mocha --exit --timeout 10000 tests/*.test.js",
+    "test:watch": "mocha --watch --exit --timeout 10000 tests/*.test.js",
+    "test:coverage": "c8 --reporter=text mocha --exit --timeout 10000 tests/*.test.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@xmldom/xmldom": "^0.8.11",
@@ -13,7 +20,6 @@
     "body-parser": "^2.2.2",
     "cookie-parser": "~1.4.7",
     "debug": "~4.4.3",
-    "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "express-session": "^1.19.0",
     "jsonwebtoken": "^9.0.3",
@@ -27,6 +33,16 @@
   "license": "Apache",
   "author": "Andrew Wippler",
   "devDependencies": {
-    "nodemon": "^3.1.14"
+    "c8": "^11.0.0",
+    "chai": "^6.2.2",
+    "dotenv": "^17.3.1",
+    "eslint": "^10.0.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "mocha": "^11.3.0",
+    "nock": "^14.0.11",
+    "nodemon": "^3.1.14",
+    "prettier": "^3.8.1",
+    "supertest": "^7.2.2"
   }
 }

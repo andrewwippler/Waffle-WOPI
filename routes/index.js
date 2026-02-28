@@ -8,15 +8,23 @@ const path = require("path");
 const { createEmptyFile } = require("../helpers/files.js");
 const { createFileToken, decodeFileToken } = require("../helpers/filetoken.js");
 
-const { MIDDLEWARE_SERVER, FILES_DIR, NODE_ENV } = require("../helpers/vars.js");
-const TOKEN_ENDPOINT = process.env.OAUTH_TOKEN_URL;
-const CLIENT_ID = process.env.OAUTH_CLIENT_ID;
-const CLIENT_SECRET = process.env.OAUTH_CLIENT_SECRET;
+const {
+  MIDDLEWARE_SERVER,
+  FILES_DIR,
+  NODE_ENV,
+  CLIENT_ID,
+  CLIENT_SECRET,
+  TOKEN_ENDPOINT,
+} = require("../helpers/vars.js");
 
 function isTokenExpiring(token, leeway = 60) {
   try {
-    const payload = JSON.parse(Buffer.from(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
-    return !payload.exp || (payload.exp - leeway) <= Math.floor(Date.now() / 1000);
+    const payload = JSON.parse(
+      Buffer.from(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"), "base64").toString(
+        "utf8"
+      )
+    );
+    return !payload.exp || payload.exp - leeway <= Math.floor(Date.now() / 1000);
   } catch (e) {
     return true;
   }
@@ -24,22 +32,43 @@ function isTokenExpiring(token, leeway = 60) {
 
 async function refreshAccessToken(req) {
   const refresh = req.session.user && req.session.user.refresh_token;
-  if (!refresh) throw new Error('no refresh token available');
-  const params = new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refresh, client_id: CLIENT_ID });
-  if (CLIENT_SECRET) params.set('client_secret', CLIENT_SECRET);
-  const resp = await fetch(TOKEN_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: params.toString() });
-  if (!resp.ok) throw new Error('token refresh failed: ' + resp.status);
+  if (!refresh) throw new Error("no refresh token available");
+  const params = new URLSearchParams({
+    grant_type: "refresh_token",
+    refresh_token: refresh,
+    client_id: CLIENT_ID,
+  });
+  if (CLIENT_SECRET) params.set("client_secret", CLIENT_SECRET);
+  const resp = await fetch(TOKEN_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: params.toString(),
+  });
+  if (!resp.ok) throw new Error("token refresh failed: " + resp.status);
   const data = await resp.json();
   req.session.user.access_token = data.access_token;
   if (data.refresh_token) req.session.user.refresh_token = data.refresh_token;
   if (data.server_url) req.session.user.server_url = data.server_url;
 }
 
-async function ensureValidToken(req) {
-  if (!req.session || !req.session.user || !req.session.user.access_token) return;
+async function ensureValidToken(req, res) {
+  if (!req.session || !req.session.user || !req.session.user.access_token) return false;
   if (isTokenExpiring(req.session.user.access_token)) {
-    try { await refreshAccessToken(req); } catch (e) { console.error('token refresh error', e); }
+    try {
+      await refreshAccessToken(req);
+    } catch (e) {
+      console.error("token refresh error", e);
+      req.session.destroy((err) => {
+        res.clearCookie("access_token", {
+          httpOnly: true,
+          secure: NODE_ENV === "production",
+          sameSite: "lax",
+        });
+      });
+      return true;
+    }
   }
+  return false;
 }
 
 router.get("/", (req, res) => {
@@ -59,31 +88,53 @@ router.get("/", (req, res) => {
 
   const entries = fs.readdirSync(absDir);
   const dirs = entries.filter((e) => fs.statSync(path.join(absDir, e)).isDirectory()).sort();
-  const files = entries.filter((e) => fs.statSync(path.join(absDir, e)).isFile() && supportedExtensions.some((ext) => e.endsWith(ext))).sort();
+  const files = entries
+    .filter(
+      (e) =>
+        fs.statSync(path.join(absDir, e)).isFile() &&
+        supportedExtensions.some((ext) => e.endsWith(ext))
+    )
+    .sort();
 
   function joinRel(name) {
     return relPath ? path.join(relPath, name).replace(/\\/g, "/") : name;
   }
 
   const fileLinks = `
-    ${dirs.length ? dirs.map(d => {
-      const token = createFileToken(joinRel(d));
-      return `<li>📁 <a href="/?path=${encodeURIComponent(joinRel(d))}">${d}</a> --- <button onclick="deleteFile('${encodeURIComponent(token)}')">Delete</button></li>`
-    }).join('') : ''}
-    ${files.length ? files.map(f => {
-      const token = createFileToken(joinRel(f));
-      return `<li>📄 <a href="/edit?file=${encodeURIComponent(token)}">${f}</a> --- <button onclick="deleteFile('${encodeURIComponent(token)}')">Delete</button></li>`
-    }).join('') : ''}
-    ${dirs.length === 0 && files.length === 0 ? '<li>No documents yet</li>' : ''}
+    ${
+      dirs.length
+        ? dirs
+            .map((d) => {
+              const token = createFileToken(joinRel(d));
+              return `<li>📁 <a href="/?path=${encodeURIComponent(joinRel(d))}">${d}</a> --- <button onclick="deleteFile('${encodeURIComponent(token)}')">Delete</button></li>`;
+            })
+            .join("")
+        : ""
+    }
+    ${
+      files.length
+        ? files
+            .map((f) => {
+              const token = createFileToken(joinRel(f));
+              return `<li>📄 <a href="/edit?file=${encodeURIComponent(token)}">${f}</a> --- <button onclick="deleteFile('${encodeURIComponent(token)}')">Delete</button></li>`;
+            })
+            .join("")
+        : ""
+    }
+    ${dirs.length === 0 && files.length === 0 ? "<li>No documents yet</li>" : ""}
   `;
 
   // Breadcrumbs
   const parts = relPath ? relPath.split(/[\\/]/).filter(Boolean) : [];
   let crumbPath = "";
-  const breadcrumbs = ['<a href="/">Home</a>'].concat(parts.map(p => {
-    crumbPath = crumbPath ? `${crumbPath}/${p}` : p;
-    return `<a href="/?path=${encodeURIComponent(crumbPath)}">${p}</a>`;
-  })).join(' / ');
+  const breadcrumbs = ['<a href="/">Home</a>']
+    .concat(
+      parts.map((p) => {
+        crumbPath = crumbPath ? `${crumbPath}/${p}` : p;
+        return `<a href="/?path=${encodeURIComponent(crumbPath)}">${p}</a>`;
+      })
+    )
+    .join(" / ");
 
   res.send(`<!DOCTYPE html><html><head><title>Waffle WOPI @ ${MIDDLEWARE_SERVER}</title>
     <style>
@@ -135,7 +186,8 @@ router.get("/", (req, res) => {
 
 // Edit document with Collabora (WOPI)
 router.get("/edit", async (req, res) => {
-  await ensureValidToken(req);
+  const expired = await ensureValidToken(req, res);
+  if (expired) return res.redirect("/session-expired");
   const token = req.query.file;
   if (!token) return res.status(400).send("Missing file parameter");
   let rel;
@@ -145,9 +197,10 @@ router.get("/edit", async (req, res) => {
     return res.status(400).send("Invalid file token");
   }
   const filePath = path.join(FILES_DIR, rel);
-  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return res.status(404).send("File not found");
+  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile())
+    return res.status(404).send("File not found");
   // server_url ends with ?
-  const wopiSrc = `WOPISrc=` + encodeURIComponent(`${MIDDLEWARE_SERVER}/wopi/files/${token}`);// this needs to be URL-encoded saving the =
+  const wopiSrc = `WOPISrc=` + encodeURIComponent(`${MIDDLEWARE_SERVER}/wopi/files/${token}`); // this needs to be URL-encoded saving the =
   let source = req.session.user.server_url + wopiSrc;
   res.send(`<!DOCTYPE html><html><head><title>Edit ${path.basename(rel)} @ ${MIDDLEWARE_SERVER}</title>
     <style>
@@ -181,16 +234,17 @@ router.get("/edit", async (req, res) => {
 
 router.delete("/edit", async (req, res) => {
   const token = req.query.file;
-  if (!token) return res.status(400).json({ error: 'Missing file parameter' });
+  if (!token) return res.status(400).json({ error: "Missing file parameter" });
   let rel;
   try {
     rel = decodeFileToken(token);
   } catch (e) {
-    return res.status(400).json({ error: 'Invalid token' });
+    return res.status(400).json({ error: "Invalid token" });
   }
   const filePath = path.join(FILES_DIR, rel);
   const normFile = path.normalize(filePath);
-  if (!normFile.startsWith(path.normalize(FILES_DIR))) return res.status(400).json({ error: 'Invalid path' });
+  if (!normFile.startsWith(path.normalize(FILES_DIR)))
+    return res.status(400).json({ error: "Invalid path" });
   try {
     const stat = await fs.promises.stat(filePath);
     if (stat.isDirectory()) {
@@ -211,8 +265,10 @@ router.delete("/edit", async (req, res) => {
 
       const total = await countEntries(filePath);
       // If non-empty and no explicit confirm, ask client to confirm
-      if (total > 0 && req.query.confirm !== '1') {
-        return res.status(409).json({ error: 'Directory not empty', needsConfirmation: true, entries: total });
+      if (total > 0 && req.query.confirm !== "1") {
+        return res
+          .status(409)
+          .json({ error: "Directory not empty", needsConfirmation: true, entries: total });
       }
       // proceed to remove (confirmed or empty)
       await fs.promises.rm(filePath, { recursive: true, force: true });
@@ -223,14 +279,15 @@ router.delete("/edit", async (req, res) => {
     await fs.promises.unlink(filePath);
     res.send("Deleted successfully.");
   } catch (err) {
-    if (err.code === 'ENOENT') return res.status(404).json({ error: 'Not found' });
+    if (err.code === "ENOENT") return res.status(404).json({ error: "Not found" });
     console.error(err);
-    res.status(500).json({ error: 'Error deleting' });
+    res.status(500).json({ error: "Error deleting" });
   }
 });
 
 router.get("/settings", async (req, res) => {
-  await ensureValidToken(req);
+  const expired = await ensureValidToken(req, res);
+  if (expired) return res.redirect("/session-expired");
   // Example query parameters
   const { access_token, iframe_type } = req.query;
 
@@ -281,18 +338,18 @@ router.post("/create/:createType", async (req, res) => {
   const sanitizedName = filename.replace(/[\/\\?%*|"<>]/g, "").replace(/[ :]/g, "_");
 
   if (req.params.createType === "folder") {
-      const rel = currentpath ? path.join(currentpath, sanitizedName) : sanitizedName;
-      const dirPath = path.join(FILES_DIR, rel);
-      const normDir = path.normalize(dirPath);
-      if (!normDir.startsWith(path.normalize(FILES_DIR))) return res.send("Invalid path");
-      try {
-        await fs.promises.mkdir(dirPath, { recursive: true });
-        res.redirect(`/?path=${encodeURIComponent(rel)}`);
-        return;
-      } catch (err) {
-        console.error(err);
-        res.send("Error creating folder. <a href='/'>Back</a>");
-      }
+    const rel = currentpath ? path.join(currentpath, sanitizedName) : sanitizedName;
+    const dirPath = path.join(FILES_DIR, rel);
+    const normDir = path.normalize(dirPath);
+    if (!normDir.startsWith(path.normalize(FILES_DIR))) return res.send("Invalid path");
+    try {
+      await fs.promises.mkdir(dirPath, { recursive: true });
+      res.redirect(`/?path=${encodeURIComponent(rel)}`);
+      return;
+    } catch (err) {
+      console.error(err);
+      res.send("Error creating folder. <a href='/'>Back</a>");
+    }
   }
   filename = sanitizedName + "." + req.params.createType;
   const rel = currentpath ? path.join(currentpath, filename) : filename;
@@ -314,16 +371,39 @@ router.post("/create/:createType", async (req, res) => {
   }
 });
 
+// Session expired page
+router.get("/session-expired", (req, res) => {
+  res.send(`<!DOCTYPE html><html><head><title>Session Expired</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 20px; }
+      h1 { color: #333; }
+      a { text-decoration: none; color: #007BFF; }
+      a:hover { text-decoration: underline; }
+    </style>
+    </head><body>
+    <h1>Session Expired</h1>
+    <p>Your session has expired. Please <a href="/auth/login">log in again</a>.</p>
+  </body></html>`);
+});
+
 // Logout route for UI link
-router.get('/logout', (req, res) => {
+router.get("/logout", (req, res) => {
   try {
     req.session.destroy(() => {
-      res.clearCookie('access_token', { httpOnly: true, secure: NODE_ENV === 'production', sameSite: 'lax' });
-      res.redirect('/');
+      res.clearCookie("access_token", {
+        httpOnly: true,
+        secure: NODE_ENV === "production",
+        sameSite: "lax",
+      });
+      res.redirect("/");
     });
   } catch (e) {
-    res.clearCookie('access_token', { httpOnly: true, secure: NODE_ENV === 'production', sameSite: 'lax' });
-    res.redirect('/');
+    res.clearCookie("access_token", {
+      httpOnly: true,
+      secure: NODE_ENV === "production",
+      sameSite: "lax",
+    });
+    res.redirect("/");
   }
 });
 

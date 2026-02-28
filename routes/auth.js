@@ -1,14 +1,21 @@
-'use strict';
+"use strict";
 
-let express = require('express');
+let express = require("express");
 let router = express.Router();
-const axios = require('axios');
-const qs = require('qs');
-const jwt = require('jsonwebtoken');
+const axios = require("axios");
+const qs = require("qs");
+const jwt = require("jsonwebtoken");
 
 const { createAccessToken } = require("../helpers/middleware.js");
 
-const {DEX_ISSUER, CLIENT_ID, CLIENT_SECRET, DOCUMENTSERVER_URL, MIDDLEWARE_SERVER, NODE_ENV } = require("../helpers/vars.js");
+const {
+  DEX_ISSUER,
+  CLIENT_ID,
+  CLIENT_SECRET,
+  DOCUMENTSERVER_URL,
+  MIDDLEWARE_SERVER,
+  NODE_ENV,
+} = require("../helpers/vars.js");
 
 const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -32,15 +39,20 @@ router.get("/callback", async (req, res) => {
         code,
         redirect_uri: `${MIDDLEWARE_SERVER}/auth/callback`,
         client_id: CLIENT_ID,
-        client_secret: CLIENT_SECRET
+        client_secret: CLIENT_SECRET,
       }),
       { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
     );
 
-
     const idToken = tokenResp.data.id_token;
+    const refreshToken = tokenResp.data.refresh_token;
     if (!idToken) return res.status(500).send("No id_token received");
-    const server_url = await axios.get(`${MIDDLEWARE_SERVER}/wopi/collaboraUrl?server=` + encodeURIComponent(DOCUMENTSERVER_URL) +`&access_token=` + encodeURIComponent(idToken));
+    const server_url = await axios.get(
+      `${MIDDLEWARE_SERVER}/wopi/collaboraUrl?server=` +
+        encodeURIComponent(DOCUMENTSERVER_URL) +
+        `&access_token=` +
+        encodeURIComponent(idToken)
+    );
 
     if (!server_url.data.url) {
       console.error("No server url received:", server_url.data);
@@ -52,14 +64,20 @@ router.get("/callback", async (req, res) => {
       id: userInfo.sub,
       email: userInfo.email,
       access_token: idToken,
+      refresh_token: refreshToken,
       server_url: server_url.data.url,
       settings_url: server_url.data.settings,
-      name: userInfo.name || userInfo.preferred_username || userInfo.email || "Unnamed User"
+      name: userInfo.name || userInfo.preferred_username || userInfo.email || "Unnamed User",
     };
 
     const token = createAccessToken(req.session.user, null);
-    res.cookie('access_token', token, { httpOnly: true, secure: NODE_ENV === "production", sameSite: 'lax', maxAge: COOKIE_MAX_AGE });
-    res.redirect(req.session.redirectAfterLogin || '/');
+    res.cookie("access_token", token, {
+      httpOnly: true,
+      secure: NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: COOKIE_MAX_AGE,
+    });
+    res.redirect(req.session.redirectAfterLogin || "/");
   } catch (err) {
     console.error("Callback error:", err.response?.data || err.message);
     res.status(500).send("Authentication failed");
@@ -68,11 +86,21 @@ router.get("/callback", async (req, res) => {
 
 // Logout
 router.get("/logout", (req, res) => {
-  req.session.destroy(err => {
-    const logoutUrl = DEX_ISSUER ? (DEX_ISSUER.endsWith("/") ? `${DEX_ISSUER}logout` : `${DEX_ISSUER}/logout`) : "/";
+  // eslint-disable-next-line no-unused-vars
+  req.session.destroy((err) => {
+    // eslint-disable-next-line no-unused-vars
+    const logoutUrl = DEX_ISSUER
+      ? DEX_ISSUER.endsWith("/")
+        ? `${DEX_ISSUER}logout`
+        : `${DEX_ISSUER}/logout`
+      : "/";
     res.redirect("/");
   });
-  res.clearCookie('access_token', { httpOnly: true, secure: NODE_ENV === "production", sameSite: 'lax' });
+  res.clearCookie("access_token", {
+    httpOnly: true,
+    secure: NODE_ENV === "production",
+    sameSite: "lax",
+  });
 });
 
 module.exports = router;

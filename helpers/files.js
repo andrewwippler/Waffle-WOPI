@@ -9,7 +9,7 @@ const officegen = require("officegen");
  * @param {string} creator - The creator name to set in the document metadata. Defaults to 'Collabora Middleware'.
  * @returns {Promise<string>} Resolves with the file path once saved.
  */
-function createEmptyFile(filePath, fileType = "docx", creator = 'Collabora Middleware') {
+function createEmptyFile(filePath, fileType = "docx", creator = "Collabora Middleware") {
   return new Promise((resolve, reject) => {
     const file = officegen({
       type: fileType,
@@ -27,8 +27,8 @@ function createEmptyFile(filePath, fileType = "docx", creator = 'Collabora Middl
 
     const out = fs.createWriteStream(filePath);
 
-    out.on("error", err => reject(err));
-    file.on("error", err => reject(err));
+    out.on("error", (err) => reject(err));
+    file.on("error", (err) => reject(err));
     out.on("close", () => resolve(filePath));
 
     file.generate(out);
@@ -36,22 +36,21 @@ function createEmptyFile(filePath, fileType = "docx", creator = 'Collabora Middl
 }
 
 // Utility: recursively list files in a directory
-function listSettingsFiles(dir, baseUrl, kind = 'userconfig') {
-
-  if (kind === 'userconfig') {
-    realDir = path.join(dir, 'userconfig');
-    realKind = 'user';
-  } else if (kind === 'systemconfig') {
-    realDir = path.join(dir, 'systemconfig');
-    realKind = 'shared';
+function listSettingsFiles(dir, baseUrl, kind = "userconfig") {
+  if (kind === "userconfig") {
+    realDir = path.join(dir, "userconfig");
+    realKind = "user";
+  } else if (kind === "systemconfig") {
+    realDir = path.join(dir, "systemconfig");
+    realKind = "shared";
   } else {
-    throw new Error('Invalid kind parameter');
+    throw new Error("Invalid kind parameter");
   }
   const response = {
     kind: realKind,
     autotext: [],
     xcu: [],
-    browsersetting: []
+    browsersetting: [],
   };
 
   function walk(currentDir, relPath = "") {
@@ -67,11 +66,11 @@ function listSettingsFiles(dir, baseUrl, kind = 'userconfig') {
         const stamp = stat.mtimeMs.toString();
 
         // Categorize by path
-        if (relFilePath.includes('autotext')) {
+        if (relFilePath.includes("autotext")) {
           response.autotext.push({ stamp, uri });
-        } else if (relFilePath.includes('xcu')) {
+        } else if (relFilePath.includes("xcu")) {
           response.xcu.push({ stamp, uri });
-        } else if (relFilePath.includes('browsersetting')) {
+        } else if (relFilePath.includes("browsersetting")) {
           response.browsersetting.push({ stamp, uri });
         }
       }
@@ -83,5 +82,5 @@ function listSettingsFiles(dir, baseUrl, kind = 'userconfig') {
 
 module.exports = {
   createEmptyFile,
-  listSettingsFiles
+  listSettingsFiles,
 };

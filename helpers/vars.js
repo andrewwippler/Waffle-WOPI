@@ -11,12 +11,12 @@ const MIDDLEWARE_SERVER = process.env.MIDDLEWARE_SERVER;
 const SUPER_ADMIN_USER = process.env.SUPER_ADMIN_USER || "admin";
 const NODE_ENV = process.env.NODE_ENV || "development";
 // Define your documents folder
-const FILES_DIR = process.env.FILES_DIR || path.join(__dirname, '../files/editable');
-const SETTINGS_DIR = process.env.FILES_DIR || path.join(__dirname, '../files/settings');
+const FILES_DIR = process.env.FILES_DIR || path.join(__dirname, "../files/editable");
+const SETTINGS_DIR = process.env.FILES_DIR || path.join(__dirname, "../files/settings");
+const TOKEN_ENDPOINT = process.env.OAUTH_TOKEN_URL || DEX_ISSUER + "/token";
 
 fs.mkdirSync(FILES_DIR, { recursive: true });
 fs.mkdirSync(SETTINGS_DIR, { recursive: true });
-
 
 module.exports = {
   DEX_ISSUER,
@@ -28,5 +28,6 @@ module.exports = {
   NODE_ENV,
   SUPER_ADMIN_USER,
   SETTINGS_DIR,
-  FILES_DIR
+  TOKEN_ENDPOINT,
+  FILES_DIR,
 };
