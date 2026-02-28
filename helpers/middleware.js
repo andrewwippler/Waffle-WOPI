@@ -1,8 +1,6 @@
 const jwt = require("jsonwebtoken");
 const jwksClient = require("jwks-rsa");
-const {
-  JWT_SECRET, DEX_ISSUER, SUPER_ADMIN_USER
-} = require("./vars.js");
+const { JWT_SECRET, DEX_ISSUER, SUPER_ADMIN_USER } = require("./vars.js");
 
 /**
  * Utility: create WOPI access token
@@ -22,11 +20,11 @@ function createAccessToken(user, fileId, canWrite = true) {
 }
 
 const client = jwksClient({
-  jwksUri: `${DEX_ISSUER}/keys`
+  jwksUri: `${DEX_ISSUER}/keys`,
 });
 
 function getKey(header, callback) {
-  client.getSigningKey(header.kid, function(err, key) {
+  client.getSigningKey(header.kid, function (err, key) {
     if (err) return callback(err);
     callback(null, key.getPublicKey());
   });
@@ -67,7 +65,6 @@ function validateAccessToken(req, res, next) {
  * Middleware: login required
  */
 function requireLogin(req, res, next) {
-
   if (req.cookies?.access_token) {
     return validateAccessToken(req, res, next);
   }
@@ -83,5 +80,5 @@ function requireLogin(req, res, next) {
 module.exports = {
   createAccessToken,
   validateAccessToken,
-  requireLogin
+  requireLogin,
 };

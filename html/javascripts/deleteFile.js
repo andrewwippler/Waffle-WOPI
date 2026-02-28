@@ -4,7 +4,7 @@ async function deleteFile(filename) {
   try {
     const res = await fetch(`/edit?file=${filename}`, {
       method: "DELETE",
-      headers: { "Content-Type": "application/json" }
+      headers: { "Content-Type": "application/json" },
     });
 
     if (res.ok) {

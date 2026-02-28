@@ -40,7 +40,7 @@ router.get("/files/:fileId", function (req, res) {
   try {
     rel = decodeFileToken(req.params.fileId);
   } catch (e) {
-    return res.status(400).json({ error: 'Invalid file token' });
+    return res.status(400).json({ error: "Invalid file token" });
   }
   const filepath = path.join(FILES_DIR, rel);
 
@@ -79,7 +79,7 @@ router.get("/files/:fileId/contents", function (req, res) {
   try {
     rel = decodeFileToken(req.params.fileId);
   } catch (e) {
-    return res.status(400).json({ error: 'Invalid file token' });
+    return res.status(400).json({ error: "Invalid file token" });
   }
   const filepath = path.join(FILES_DIR, rel);
   if (!fs.existsSync(filepath)) {
@@ -105,7 +105,7 @@ router.post("/files/:fileId/contents", function (req, res) {
   try {
     rel = decodeFileToken(req.params.fileId);
   } catch (e) {
-    return res.status(400).json({ error: 'Invalid file token' });
+    return res.status(400).json({ error: "Invalid file token" });
   }
   const filepath = path.join(FILES_DIR, rel);
 
@@ -125,64 +125,59 @@ router.get("/collaboraUrl", function (req, res) {
   let collaboraOnlineHost = DOCUMENTSERVER_URL;
   let httpClient = collaboraOnlineHost.startsWith("https") ? https : http;
   let data = "";
-  let request = httpClient.get(
-    collaboraOnlineHost + "/hosting/discovery",
-    function (response) {
-      response.on("data", function (chunk) {
-        data += chunk.toString();
-      });
-      response.on("end", function () {
-        if (response.statusCode !== 200) {
-          let err = "Request failed. Satus Code: " + response.statusCode;
-          response.resume();
-          res.status(response.statusCode).send(err);
-          console.log(err);
-          return;
-        }
-        if (!response.complete) {
-          let err =
-            "No able to retrieve the discovery.xml file from the Collabora Online server with the submitted address.";
-          res.status(404).send(err);
-          console.log(err);
-          return;
-        }
-        let doc = new Dom().parseFromString(data);
-        if (!doc) {
-          let err = "The retrieved discovery.xml file is not a valid XML file";
-          res.status(404).send(err);
-          console.log(err);
-          return;
-        }
-        let mimeType = "text/plain";
-        let nodes = xpath.select(
-          "/wopi-discovery/net-zone/app[@name='" + mimeType + "']/action",
-          doc
-        );
-        let settings = xpath.select(
-          "/wopi-discovery/net-zone/app[@name='Settings']/action",
-          doc
-        );
+  // eslint-disable-next-line no-unused-vars
+  let request = httpClient.get(collaboraOnlineHost + "/hosting/discovery", function (response) {
+    response.on("data", function (chunk) {
+      data += chunk.toString();
+    });
+    response.on("end", function () {
+      if (response.statusCode !== 200) {
+        let err = "Request failed. Satus Code: " + response.statusCode;
+        response.resume();
+        res.status(response.statusCode).send(err);
+        console.log(err);
+        return;
+      }
+      if (!response.complete) {
+        let err =
+          "No able to retrieve the discovery.xml file from the Collabora Online server with the submitted address.";
+        res.status(404).send(err);
+        console.log(err);
+        return;
+      }
+      let doc = new Dom().parseFromString(data);
+      if (!doc) {
+        let err = "The retrieved discovery.xml file is not a valid XML file";
+        res.status(404).send(err);
+        console.log(err);
+        return;
+      }
+      let mimeType = "text/plain";
+      let nodes = xpath.select(
+        "/wopi-discovery/net-zone/app[@name='" + mimeType + "']/action",
+        doc
+      );
+      let settings = xpath.select("/wopi-discovery/net-zone/app[@name='Settings']/action", doc);
 
-        if (!nodes || nodes.length !== 1) {
-          let err = "The requested mime type is not handled";
-          res.status(404).send(err);
-          console.log(err);
-          return;
-        }
-        let onlineUrl = nodes[0].getAttribute("urlsrc");
-        let onlineSettingsUrl = settings[0].getAttribute("urlsrc");
+      if (!nodes || nodes.length !== 1) {
+        let err = "The requested mime type is not handled";
+        res.status(404).send(err);
+        console.log(err);
+        return;
+      }
+      let onlineUrl = nodes[0].getAttribute("urlsrc");
+      let onlineSettingsUrl = settings[0].getAttribute("urlsrc");
 
-        res.json({
-          url: onlineUrl,
-          settings: onlineSettingsUrl,
-        });
+      res.json({
+        url: onlineUrl,
+        settings: onlineSettingsUrl,
       });
-      response.on("error", function (err) {
-        res.status(404).send("Request error: " + err);
-        console.log("Request error: " + err.message);
-      });
-    }
-  );
+    });
+    response.on("error", function (err) {
+      res.status(404).send("Request error: " + err);
+      console.log("Request error: " + err.message);
+    });
+  });
 });
 
 // e.g. settings/userconfig/xcu/paragraphStyles.xcu
@@ -201,11 +196,7 @@ router.get("/settings", (req, res) => {
   if (type === "userconfig") {
     response = listSettingsFiles(SETTINGS_DIR, MIDDLEWARE_SERVER, "userconfig");
   } else if (type === "systemconfig") {
-    response = listSettingsFiles(
-      SETTINGS_DIR,
-      MIDDLEWARE_SERVER,
-      "systemconfig"
-    );
+    response = listSettingsFiles(SETTINGS_DIR, MIDDLEWARE_SERVER, "systemconfig");
   } else {
     return res.status(400).json({ error: "Invalid type parameter" });
   }
@@ -254,7 +245,7 @@ router.post("/files/:fileId", (req, res) => {
   try {
     rel = decodeFileToken(fileId);
   } catch (e) {
-    return res.status(400).json({ error: 'Invalid file token' });
+    return res.status(400).json({ error: "Invalid file token" });
   }
   const override = req.header("X-WOPI-Override");
   console.log("X-WOPI-Override:", override, " for fileId:", fileId);
@@ -291,7 +282,7 @@ router.post("/files/:fileId", (req, res) => {
     }
     locks[fileId].expires = Date.now() + 108000; // 30 min
     return res.sendStatus(200);
-    } else if (override === "PUT_RELATIVE") {
+  } else if (override === "PUT_RELATIVE") {
     // Save As
     const suggestedTarget = utf7.decode(req.header("X-WOPI-SuggestedTarget") || "");
     const newFileName = suggestedTarget.replace(/^\.?/, ""); // Remove leading dot if present
