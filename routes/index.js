@@ -283,49 +283,49 @@ router.delete("/edit", async (req, res) => {
   }
 });
 
-router.get("/settings", async (req, res) => {
-  // Example query parameters
-  const { access_token, iframe_type } = req.query;
-
-  // iframe_type: "user" or "admin"
-  const type = iframe_type === "admin" ? "admin" : "user";
-
-  // Build iframe URL (Collabora expects a POST normally, but can also be set via form)
-  const iframeSrc = req.session.user.settings_url;
-
-  // HTML page with form post to Collabora iframe
-  const html = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Collabora Settings</title>
-<style>
-html, body { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
-#collabora-settings-iframe { border: none; width: 100%; height: 100vh; }
-</style>
-</head>
-<body>
-<form id="settingsForm" action="${iframeSrc}" method="post" enctype="multipart/form-data" target="collabora-settings-iframe">
-    <input type="hidden" name="access_token" value="${access_token}">
-    <input type="hidden" name="iframe_type" value="${type}">
-    <input type="hidden" name="wopi_setting_base_url" value="${MIDDLEWARE_SERVER}/wopi/settings">
-    <!-- Optional: pass theme or CSS variables -->
-    <input type="hidden" name="ui_theme" value="light">
-</form>
-
-<iframe id="collabora-settings-iframe" name="collabora-settings-iframe"></iframe>
-
-<script>
-    // Auto-submit the form to load iframe
-    document.getElementById('settingsForm').submit();
-</script>
-</body>
-</html>
-`;
-
-  res.send(html);
-});
+// router.get("/settings", async (req, res) => {
+//   // Example query parameters
+//   const { access_token, iframe_type } = req.query;
+//
+//   // iframe_type: "user" or "admin"
+//   const type = iframe_type === "admin" ? "admin" : "user";
+//
+//   // Build iframe URL (Collabora expects a POST normally, but can also be set via form)
+//   const iframeSrc = req.session.user.settings_url;
+//
+//   // HTML page with form post to Collabora iframe
+//   const html = `
+// <!DOCTYPE html>
+// <html lang="en">
+// <head>
+// <meta charset="UTF-8">
+// <title>Collabora Settings</title>
+// <style>
+// html, body { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
+// #collabora-settings-iframe { border: none; width: 100%; height: 100vh; }
+// </style>
+// </head>
+// <body>
+// <form id="settingsForm" action="${iframeSrc}" method="post" enctype="multipart/form-data" target="collabora-settings-iframe">
+//     <input type="hidden" name="access_token" value="${access_token}">
+//     <input type="hidden" name="iframe_type" value="${type}">
+//     <input type="hidden" name="wopi_setting_base_url" value="${MIDDLEWARE_SERVER}/wopi/settings">
+//     <!-- Optional: pass theme or CSS variables -->
+//     <input type="hidden" name="ui_theme" value="light">
+// </form>
+//
+// <iframe id="collabora-settings-iframe" name="collabora-settings-iframe"></iframe>
+//
+// <script>
+//     // Auto-submit the form to load iframe
+//     document.getElementById('settingsForm').submit();
+// </script>
+// </body>
+// </html>
+// `;
+//
+//   res.send(html);
+// });
 
 // Create new document
 router.post("/create/:createType", async (req, res) => {

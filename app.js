@@ -7,7 +7,7 @@ let bodyParser = require("body-parser");
 let cookieParser = require("cookie-parser");
 const fs = require("fs");
 const session = require("express-session");
-// officegen is used in helpers/files.js
+// Office templates are in templates/ directory and used by helpers/files.js
 
 let indexRouter = require("./routes/index");
 let wopiRouter = require("./routes/wopi");

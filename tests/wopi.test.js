@@ -307,73 +307,73 @@ describe("WOPI Routes", () => {
     });
   });
 
-  describe("GET /wopi/settings", () => {
-    it("should return settings files for userconfig type", (done) => {
-      const settingsDir = path.join(SETTINGS_DIR, "userconfig");
-      fs.mkdirSync(settingsDir, { recursive: true });
-      fs.writeFileSync(path.join(settingsDir, "test.xcu"), "test content");
+  // describe("GET /wopi/settings", () => {
+  //   it("should return settings files for userconfig type", (done) => {
+  //     const settingsDir = path.join(SETTINGS_DIR, "userconfig");
+  //     fs.mkdirSync(settingsDir, { recursive: true });
+  //     fs.writeFileSync(path.join(settingsDir, "test.xcu"), "test content");
+  //
+  //     agent
+  //       .get("/wopi/settings")
+  //       .query({ access_token: accessToken, type: "userconfig" })
+  //       .expect(200)
+  //       .end((err, res) => {
+  //         if (err) return done(err);
+  //         expect(res.body.files).to.have.property("kind");
+  //         expect(res.body.files.kind).to.equal("user");
+  //         done();
+  //       });
+  //   });
+  //
+  //   it("should return settings - route has known bug returning userconfig", (done) => {
+  //     const settingsDir = path.join(SETTINGS_DIR, "systemconfig");
+  //     fs.mkdirSync(settingsDir, { recursive: true });
+  //     fs.writeFileSync(path.join(settingsDir, "test.xcu"), "test content");
+  //
+  //     agent
+  //       .get("/wopi/settings")
+  //       .query({ access_token: accessToken, type: "systemconfig" })
+  //       .expect(200)
+  //       .end((err, res) => {
+  //         if (err) return done(err);
+  //         expect(res.body.files).to.have.property("kind");
+  //         done();
+  //       });
+  //   });
+  //
+  //   it("should return 200 for invalid type - route has known bug", (done) => {
+  //     agent
+  //       .get("/wopi/settings")
+  //       .query({ access_token: accessToken, type: "invalid" })
+  //       .expect(200, done);
+  //   });
+  // });
 
-      agent
-        .get("/wopi/settings")
-        .query({ access_token: accessToken, type: "userconfig" })
-        .expect(200)
-        .end((err, res) => {
-          if (err) return done(err);
-          expect(res.body.files).to.have.property("kind");
-          expect(res.body.files.kind).to.equal("user");
-          done();
-        });
-    });
-
-    it("should return settings - route has known bug returning userconfig", (done) => {
-      const settingsDir = path.join(SETTINGS_DIR, "systemconfig");
-      fs.mkdirSync(settingsDir, { recursive: true });
-      fs.writeFileSync(path.join(settingsDir, "test.xcu"), "test content");
-
-      agent
-        .get("/wopi/settings")
-        .query({ access_token: accessToken, type: "systemconfig" })
-        .expect(200)
-        .end((err, res) => {
-          if (err) return done(err);
-          expect(res.body.files).to.have.property("kind");
-          done();
-        });
-    });
-
-    it("should return 200 for invalid type - route has known bug", (done) => {
-      agent
-        .get("/wopi/settings")
-        .query({ access_token: accessToken, type: "invalid" })
-        .expect(200, done);
-    });
-  });
-
-  describe("POST /wopi/settings/upload", () => {
-    it("should return 400 if missing fileId", (done) => {
-      agent
-        .post("/wopi/settings/upload")
-        .query({ access_token: accessToken })
-        .attach("file", path.join(__dirname, "fixtures", "test.txt"))
-        .expect(400, done);
-    });
-
-    it("should return 400 if missing file", (done) => {
-      agent
-        .post("/wopi/settings/upload")
-        .query({ access_token: accessToken, fileId: "settings/userconfig/test.txt" })
-        .expect(400, done);
-    });
-
-    it("should upload settings file successfully", (done) => {
-      const fileId = `settings/userconfig/test-${Date.now()}.txt`;
-      agent
-        .post("/wopi/settings/upload")
-        .query({ access_token: accessToken, fileId })
-        .attach("file", path.join(__dirname, "fixtures", "test.txt"))
-        .expect(200, done);
-    });
-  });
+  // describe("POST /wopi/settings/upload", () => {
+  //   it("should return 400 if missing fileId", (done) => {
+  //     agent
+  //       .post("/wopi/settings/upload")
+  //       .query({ access_token: accessToken })
+  //       .attach("file", path.join(__dirname, "fixtures", "test.txt"))
+  //       .expect(400, done);
+  //   });
+  //
+  //   it("should return 400 if missing file", (done) => {
+  //     agent
+  //       .post("/wopi/settings/upload")
+  //       .query({ access_token: accessToken, fileId: "settings/userconfig/test.txt" })
+  //       .expect(400, done);
+  //   });
+  //
+  //   it("should upload settings file successfully", (done) => {
+  //     const fileId = `settings/userconfig/test-${Date.now()}.txt`;
+  //     agent
+  //       .post("/wopi/settings/upload")
+  //       .query({ access_token: accessToken, fileId })
+  //       .attach("file", path.join(__dirname, "fixtures", "test.txt"))
+  //       .expect(200, done);
+  //   });
+  // });
 });
 
 describe("Index Routes", () => {

@@ -11,16 +11,10 @@ let Dom = require("@xmldom/xmldom").DOMParser;
 let xpath = require("xpath");
 const multer = require("multer");
 const upload = multer({ dest: "/tmp" });
-const utf7 = require("utf7");
+const { decode: utf7Decode } = require("../helpers/utf7");
 
-const {
-  DOCUMENTSERVER_URL,
-  FILES_DIR,
-  SETTINGS_DIR,
-  MIDDLEWARE_SERVER,
-} = require("../helpers/vars.js");
+const { DOCUMENTSERVER_URL, FILES_DIR, MIDDLEWARE_SERVER } = require("../helpers/vars.js");
 
-const { listSettingsFiles } = require("../helpers/files.js");
 const { createFileToken, decodeFileToken } = require("../helpers/filetoken.js");
 
 const locks = {}; // { fileId: { value: string, expires: number } }
@@ -180,6 +174,7 @@ router.get("/collaboraUrl", function (req, res) {
   });
 });
 
+/* *
 // e.g. settings/userconfig/xcu/paragraphStyles.xcu
 // e.g. settings/systemconfig/xcu/defaultStyles.xcu
 router.get("/settings", (req, res) => {
@@ -245,6 +240,7 @@ router.post("/settings/upload", (req, res) => {
     });
   });
 });
+*/
 
 /* *
  *  wopi X-WOPI-Overrides endpoint
@@ -294,7 +290,7 @@ router.post("/files/:fileId", (req, res) => {
     return res.sendStatus(200);
   } else if (override === "PUT_RELATIVE") {
     // Save As
-    const suggestedTarget = utf7.decode(req.header("X-WOPI-SuggestedTarget") || "");
+    const suggestedTarget = utf7Decode(req.header("X-WOPI-SuggestedTarget") || "");
     const newFileName = suggestedTarget.replace(/^\.?/, ""); // Remove leading dot if present
     const newFilePath = path.join(FILES_DIR, newFileName);
     fs.writeFileSync(newFilePath, req.body);
@@ -304,7 +300,7 @@ router.post("/files/:fileId", (req, res) => {
     });
   } else if (override === "RENAME_FILE") {
     // Rename
-    const requestedName = utf7.decode(req.header("X-WOPI-RequestedName") || "");
+    const requestedName = utf7Decode(req.header("X-WOPI-RequestedName") || "");
     const ext = path.extname(rel);
     const newFileName = requestedName + ext;
     const oldPath = path.join(FILES_DIR, rel);
