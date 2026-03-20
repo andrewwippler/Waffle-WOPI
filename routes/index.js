@@ -17,7 +17,7 @@ const {
   TOKEN_ENDPOINT,
 } = require("../helpers/vars.js");
 
-function isTokenExpiring(token, leeway = 60) {
+function isTokenExpiring(token, leeway = 86400) {
   try {
     const payload = JSON.parse(
       Buffer.from(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"), "base64").toString(
@@ -186,8 +186,6 @@ router.get("/", (req, res) => {
 
 // Edit document with Collabora (WOPI)
 router.get("/edit", async (req, res) => {
-  const expired = await ensureValidToken(req, res);
-  if (expired) return res.redirect("/session-expired");
   const token = req.query.file;
   if (!token) return res.status(400).send("Missing file parameter");
   let rel;
@@ -286,8 +284,6 @@ router.delete("/edit", async (req, res) => {
 });
 
 router.get("/settings", async (req, res) => {
-  const expired = await ensureValidToken(req, res);
-  if (expired) return res.redirect("/session-expired");
   // Example query parameters
   const { access_token, iframe_type } = req.query;
 
