@@ -32,6 +32,7 @@ router.get("/callback", async (req, res) => {
     const code = req.query.code;
     if (!code) return res.status(400).send("Missing code");
 
+    console.log("[auth/callback] Exchanging code for tokens...");
     const tokenResp = await axios.post(
       `${DEX_ISSUER}/token`,
       qs.stringify({
@@ -47,6 +48,8 @@ router.get("/callback", async (req, res) => {
     const idToken = tokenResp.data.id_token;
     const refreshToken = tokenResp.data.refresh_token;
     if (!idToken) return res.status(500).send("No id_token received");
+    console.log("[auth/callback] Token exchanged successfully, fetching collaboraUrl...");
+
     const server_url = await axios.get(
       `${MIDDLEWARE_SERVER}/wopi/collaboraUrl?server=` +
         encodeURIComponent(DOCUMENTSERVER_URL) +
@@ -55,10 +58,13 @@ router.get("/callback", async (req, res) => {
     );
 
     if (!server_url.data.url) {
-      console.error("No server url received:", server_url.data);
+      console.error("[auth/callback] No server url received:", server_url.data);
+    } else {
+      console.log("[auth/callback] Collabora URL received:", server_url.data.url);
     }
     const userInfo = jwt.decode(idToken);
     if (!userInfo || !userInfo.sub) return res.status(500).send("Invalid id_token");
+    console.log("[auth/callback] User info:", userInfo.email, "sub:", userInfo.sub);
 
     req.session.user = {
       id: userInfo.sub,
@@ -77,9 +83,13 @@ router.get("/callback", async (req, res) => {
       sameSite: "lax",
       maxAge: COOKIE_MAX_AGE,
     });
+    console.log(
+      "[auth/callback] Session created, redirecting to:",
+      req.session.redirectAfterLogin || "/"
+    );
     res.redirect(req.session.redirectAfterLogin || "/");
   } catch (err) {
-    console.error("Callback error:", err.response?.data || err.message);
+    console.error("[auth/callback] Error:", err.response?.data || err.message);
     res.status(500).send("Authentication failed");
   }
 });

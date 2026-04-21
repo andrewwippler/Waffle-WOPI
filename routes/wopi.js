@@ -116,7 +116,16 @@ router.post("/files/:fileId/contents", function (req, res) {
 });
 
 router.get("/collaboraUrl", function (req, res) {
-  let collaboraOnlineHost = DOCUMENTSERVER_URL;
+  const requestedServer = req.query.server || DOCUMENTSERVER_URL;
+  const mimeType =
+    req.query.mimeType || "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  const extension = req.query.extension || "docx";
+
+  console.log("[collaboraUrl] Requested server:", requestedServer);
+  console.log("[collaboraUrl] Requested mimeType:", mimeType);
+  console.log("[collaboraUrl] Requested extension:", extension);
+
+  let collaboraOnlineHost = requestedServer;
   let httpClient = collaboraOnlineHost.startsWith("https") ? https : http;
   let data = "";
   // eslint-disable-next-line no-unused-vars
@@ -126,41 +135,53 @@ router.get("/collaboraUrl", function (req, res) {
     });
     response.on("end", function () {
       if (response.statusCode !== 200) {
-        let err = "Request failed. Satus Code: " + response.statusCode;
+        let err = "Request failed. Status Code: " + response.statusCode;
         response.resume();
         res.status(response.statusCode).send(err);
-        console.log(err);
+        console.error("[collaboraUrl]", err);
         return;
       }
       if (!response.complete) {
         let err =
-          "No able to retrieve the discovery.xml file from the Collabora Online server with the submitted address.";
+          "Unable to retrieve the discovery.xml file from the Collabora Online server with the submitted address.";
         res.status(404).send(err);
-        console.log(err);
+        console.error("[collaboraUrl]", err);
         return;
       }
       let doc = new Dom().parseFromString(data);
       if (!doc) {
         let err = "The retrieved discovery.xml file is not a valid XML file";
         res.status(404).send(err);
-        console.log(err);
+        console.error("[collaboraUrl]", err);
         return;
       }
-      let mimeType = "text/plain";
+
+      console.log("[collaboraUrl] Looking up mimeType:", mimeType);
       let nodes = xpath.select(
         "/wopi-discovery/net-zone/app[@name='" + mimeType + "']/action",
         doc
       );
+
+      if (!nodes || nodes.length === 0) {
+        console.log("[collaboraUrl] No match for mimeType, trying extension:", extension);
+        nodes = xpath.select("/wopi-discovery/net-zone/app[@name='" + extension + "']/action", doc);
+      }
+
       let settings = xpath.select("/wopi-discovery/net-zone/app[@name='Settings']/action", doc);
 
-      if (!nodes || nodes.length !== 1) {
+      if (!nodes || nodes.length === 0) {
         let err = "The requested mime type is not handled";
         res.status(404).send(err);
-        console.log(err);
+        console.error("[collaboraUrl]", err, "- mimeType:", mimeType, "extension:", extension);
         return;
       }
+
+      console.log("[collaboraUrl] Found", nodes.length, "action(s) for mimeType/extension");
       let onlineUrl = nodes[0].getAttribute("urlsrc");
-      let onlineSettingsUrl = settings[0].getAttribute("urlsrc");
+      let onlineSettingsUrl = settings[0] ? settings[0].getAttribute("urlsrc") : null;
+
+      console.log("[collaboraUrl] Returning onlineUrl:", onlineUrl);
+      console.log("[collaboraUrl] Returning settingsUrl:", onlineSettingsUrl);
 
       res.json({
         url: onlineUrl,
@@ -169,7 +190,7 @@ router.get("/collaboraUrl", function (req, res) {
     });
     response.on("error", function (err) {
       res.status(404).send("Request error: " + err);
-      console.log("Request error: " + err.message);
+      console.error("[collaboraUrl] Request error:", err.message);
     });
   });
 });
