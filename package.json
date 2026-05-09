@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@xmldom/xmldom": "^0.8.11",
-    "axios": "^1.13.6",
+    "axios": "^1.16.0",
     "body-parser": "^2.2.2",
     "cookie-parser": "~1.4.7",
     "debug": "~4.4.3",
