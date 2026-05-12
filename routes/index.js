@@ -4,6 +4,7 @@ let express = require("express");
 let router = express.Router();
 const fs = require("fs");
 const path = require("path");
+const axios = require("axios");
 
 const { createEmptyFile } = require("../helpers/files.js");
 const { createFileToken, decodeFileToken } = require("../helpers/filetoken.js");
@@ -16,6 +17,7 @@ const {
   CLIENT_ID,
   CLIENT_SECRET,
   TOKEN_ENDPOINT,
+  DOCUMENTSERVER_URL,
 } = require("../helpers/vars.js");
 
 function isTokenExpiring(token, leeway = 86400) {
@@ -203,19 +205,30 @@ router.get("/edit", async (req, res) => {
   const canWrite = mode === "edit";
   const wopiAccessToken = createAccessToken(req.session.user, rel, canWrite);
 
+  if (!req.session.user.server_url) {
+    try {
+      const resp = await axios.get(
+        `${MIDDLEWARE_SERVER}/wopi/collaboraUrl?server=` +
+          encodeURIComponent(DOCUMENTSERVER_URL) +
+          `&access_token=` +
+          encodeURIComponent(wopiAccessToken)
+      );
+      req.session.user.server_url = resp.data.url;
+      req.session.user.settings_url = resp.data.settings;
+    } catch (e) {
+      return res.status(500).send("Failed to discover Collabora URL");
+    }
+  }
+
   const wopiSrc = `WOPISrc=` + encodeURIComponent(`${MIDDLEWARE_SERVER}/wopi/files/${token}`);
   let source = req.session.user.server_url + wopiSrc;
   res.send(`<!DOCTYPE html><html><head><title>${mode === "edit" ? "Edit" : "View"} ${path.basename(rel)} @ ${MIDDLEWARE_SERVER}</title>
     <style>
       html, body { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
       #collabora-online-viewer { border: none; width: 100%; height: 100vh; }
-      #mode-toggle { position: fixed; top: 10px; right: 10px; z-index: 1000; padding: 8px 16px; cursor: pointer; background: #007BFF; color: #fff; border: none; border-radius: 4px; font-size: 14px; }
-      #mode-toggle:hover { background: #0056b3; }
     </style>
 
     </head><body>
-
-    <button id="mode-toggle" onclick="toggleMode()">${mode === "edit" ? "View Mode" : "Edit Mode"}</button>
 
     <div style="display: none">
   <form action="${source}" enctype="multipart/form-data" method="post" target="collabora-online-viewer" id="collabora-submit-form">
@@ -233,13 +246,6 @@ router.get("/edit", async (req, res) => {
 
     <script src="/javascripts/wopi.js"></script>
     <script type="text/javascript">
-function toggleMode() {
-  const mode = "${mode}";
-  const nextMode = mode === "edit" ? "view" : "edit";
-  const url = new URL(window.location.href);
-  url.searchParams.set("mode", nextMode);
-  window.location.href = url.toString();
-}
 // Auto-submit the form to load iframe
     document.getElementById('collabora-submit-form').submit();
     </script>

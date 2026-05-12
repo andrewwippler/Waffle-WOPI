@@ -24,9 +24,13 @@ function createAccessToken(user, fileId, canWrite = true) {
   const payload = {
     userId: user.id,
     name: user.name,
+    email: user.email,
     fileId,
     canWrite,
+    server_url: user.server_url,
+    settings_url: user.settings_url,
   };
+  if (user.access_token) payload.id_token = user.access_token;
   return jwt.sign(payload, JWT_SECRET, { expiresIn: "7d" });
 }
 
@@ -119,6 +123,16 @@ async function validateAccessToken(req, res, next) {
       try {
         req.wopi = jwt.verify(token, JWT_SECRET);
         req.wopi.isAdminUser = req.wopi.name === SUPER_ADMIN_USER;
+        if (!req.session.user) {
+          req.session.user = {
+            id: req.wopi.userId,
+            email: req.wopi.email,
+            name: req.wopi.name,
+            access_token: req.wopi.id_token,
+            server_url: req.wopi.server_url,
+            settings_url: req.wopi.settings_url,
+          };
+        }
         next();
         resolve();
       } catch (err2) {

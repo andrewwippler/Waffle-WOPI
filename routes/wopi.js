@@ -148,7 +148,7 @@ router.get("/collaboraUrl", function (req, res) {
         console.error("[collaboraUrl]", err);
         return;
       }
-      let doc = new Dom().parseFromString(data);
+      let doc = new Dom().parseFromString(data, "text/xml");
       if (!doc) {
         let err = "The retrieved discovery.xml file is not a valid XML file";
         res.status(404).send(err);
