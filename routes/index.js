@@ -7,6 +7,7 @@ const path = require("path");
 
 const { createEmptyFile } = require("../helpers/files.js");
 const { createFileToken, decodeFileToken } = require("../helpers/filetoken.js");
+const { createAccessToken } = require("../helpers/middleware.js");
 
 const {
   MIDDLEWARE_SERVER,
@@ -197,16 +198,24 @@ router.get("/edit", async (req, res) => {
   const filePath = path.join(FILES_DIR, rel);
   if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile())
     return res.status(404).send("File not found");
-  // server_url ends with ?
-  const wopiSrc = `WOPISrc=` + encodeURIComponent(`${MIDDLEWARE_SERVER}/wopi/files/${token}`); // this needs to be URL-encoded saving the =
+
+  const mode = req.query.mode === "view" ? "view" : "edit";
+  const canWrite = mode === "edit";
+  const wopiAccessToken = createAccessToken(req.session.user, rel, canWrite);
+
+  const wopiSrc = `WOPISrc=` + encodeURIComponent(`${MIDDLEWARE_SERVER}/wopi/files/${token}`);
   let source = req.session.user.server_url + wopiSrc;
-  res.send(`<!DOCTYPE html><html><head><title>Edit ${path.basename(rel)} @ ${MIDDLEWARE_SERVER}</title>
+  res.send(`<!DOCTYPE html><html><head><title>${mode === "edit" ? "Edit" : "View"} ${path.basename(rel)} @ ${MIDDLEWARE_SERVER}</title>
     <style>
       html, body { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
       #collabora-online-viewer { border: none; width: 100%; height: 100vh; }
+      #mode-toggle { position: fixed; top: 10px; right: 10px; z-index: 1000; padding: 8px 16px; cursor: pointer; background: #007BFF; color: #fff; border: none; border-radius: 4px; font-size: 14px; }
+      #mode-toggle:hover { background: #0056b3; }
     </style>
 
     </head><body>
+
+    <button id="mode-toggle" onclick="toggleMode()">${mode === "edit" ? "View Mode" : "Edit Mode"}</button>
 
     <div style="display: none">
   <form action="${source}" enctype="multipart/form-data" method="post" target="collabora-online-viewer" id="collabora-submit-form">
@@ -214,7 +223,7 @@ router.get("/edit", async (req, res) => {
     <input name="lang" value="en_US" type="hidden" id="lang-form"/>
     <input name="closebutton" value="1" type="hidden" id="close-button-form"/>
     <input name="ui_defaults" value="UIMode=tabbed;TextSidebar=false;TextRuler=true;" type="hidden" id="ui-defaults"/>
-    <input name="access_token" value="${req.session.user.access_token}" type="hidden" id="access-token"/>
+    <input name="access_token" value="${wopiAccessToken}" type="hidden" id="access-token"/>
     <input type="submit" value="" />
   </form>
 </div>
@@ -224,6 +233,13 @@ router.get("/edit", async (req, res) => {
 
     <script src="/javascripts/wopi.js"></script>
     <script type="text/javascript">
+function toggleMode() {
+  const mode = "${mode}";
+  const nextMode = mode === "edit" ? "view" : "edit";
+  const url = new URL(window.location.href);
+  url.searchParams.set("mode", nextMode);
+  window.location.href = url.toString();
+}
 // Auto-submit the form to load iframe
     document.getElementById('collabora-submit-form').submit();
     </script>

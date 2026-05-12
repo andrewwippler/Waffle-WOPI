@@ -118,7 +118,6 @@ async function validateAccessToken(req, res, next) {
       }
       try {
         req.wopi = jwt.verify(token, JWT_SECRET);
-        req.wopi.canWrite = true;
         req.wopi.isAdminUser = req.wopi.name === SUPER_ADMIN_USER;
         next();
         resolve();
