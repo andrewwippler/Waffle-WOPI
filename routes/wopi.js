@@ -313,23 +313,27 @@ router.post("/files/:fileId", (req, res) => {
     // Save As
     const suggestedTarget = utf7Decode(req.header("X-WOPI-SuggestedTarget") || "");
     const newFileName = suggestedTarget.replace(/^\.?/, ""); // Remove leading dot if present
-    const newFilePath = path.join(FILES_DIR, newFileName);
+    const dir = path.dirname(rel);
+    const newRel = dir === "." ? newFileName : path.join(dir, newFileName);
+    const newFilePath = path.join(FILES_DIR, newRel);
     fs.writeFileSync(newFilePath, req.body);
     res.json({
       Name: newFileName,
-      Url: `https://${MIDDLEWARE_SERVER}/wopi/files/${encodeURIComponent(createFileToken(newFileName))}?access_token=${req.query.access_token}`,
+      Url: `https://${MIDDLEWARE_SERVER}/wopi/files/${encodeURIComponent(createFileToken(newRel))}?access_token=${req.query.access_token}`,
     });
   } else if (override === "RENAME_FILE") {
     // Rename
     const requestedName = utf7Decode(req.header("X-WOPI-RequestedName") || "");
     const ext = path.extname(rel);
     const newFileName = requestedName + ext;
+    const dir = path.dirname(rel);
     const oldPath = path.join(FILES_DIR, rel);
-    const newPath = path.join(FILES_DIR, newFileName);
+    const newRel = dir === "." ? newFileName : path.join(dir, newFileName);
+    const newPath = path.join(FILES_DIR, newRel);
     fs.renameSync(oldPath, newPath);
     res.json({
       Name: newFileName,
-      Url: `https://${MIDDLEWARE_SERVER}/wopi/files/${encodeURIComponent(createFileToken(newFileName))}?access_token=${req.query.access_token}`,
+      Url: `https://${MIDDLEWARE_SERVER}/wopi/files/${encodeURIComponent(createFileToken(newRel))}?access_token=${req.query.access_token}`,
     });
   } else if (override === "UNLOCK_AND_RELOCK") {
     const oldLock = req.header("X-WOPI-OldLock");

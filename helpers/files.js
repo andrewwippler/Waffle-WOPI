@@ -81,9 +81,10 @@ async function createEmptyFile(filePath, fileType = "docx", creator = "Collabora
     throw new Error(`Template not found: ${templateFile}`);
   }
 
-  fs.copyFileSync(templateFile, filePath);
-
-  await updateDocumentMetadata(filePath, creator);
+  const tmpPath = filePath + ".tmp";
+  fs.copyFileSync(templateFile, tmpPath);
+  await updateDocumentMetadata(tmpPath, creator);
+  fs.renameSync(tmpPath, filePath);
 
   return filePath;
 }
