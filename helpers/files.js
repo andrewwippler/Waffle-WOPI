@@ -20,11 +20,12 @@ function escapeXml(str) {
 }
 
 async function updateDocumentMetadata(filePath, creator) {
-  const zip = await JSZip.loadFile(filePath);
+  const fileData = fs.readFileSync(filePath);
+  const zip = await JSZip.loadAsync(fileData);
   const coreXml = zip.file("docProps/core.xml");
 
   if (coreXml) {
-    let xml = coreXml.asText();
+    let xml = await coreXml.async("string");
 
     xml = xml.replace(/(<dc:creator>)[^<]*(<\/dc:creator>)/, `$1${escapeXml(creator)}$2`);
     if (!xml.includes("<dc:creator>")) {
