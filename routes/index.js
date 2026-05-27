@@ -6,13 +6,14 @@ const fs = require("fs");
 const path = require("path");
 const axios = require("axios");
 
-const { createEmptyFile } = require("../helpers/files.js");
+const { createEmptyFile, generateWriterXcu, sanitizeUsername, getExistingXcu, STYLE_DEFINITIONS } = require("../helpers/files.js");
 const { createFileToken, decodeFileToken } = require("../helpers/filetoken.js");
 const { createAccessToken } = require("../helpers/middleware.js");
 
 const {
   MIDDLEWARE_SERVER,
   FILES_DIR,
+  SETTINGS_DIR,
   NODE_ENV,
   CLIENT_ID,
   CLIENT_SECRET,
@@ -153,7 +154,10 @@ router.get("/", (req, res) => {
     </style>
     </head><body>
     <h1>Welcome, ${user.name}</h1>
-    <a href="/logout">Logout</a>
+    <a href="/logout">Logout</a> |
+    <a href="/settings?iframe_type=user">User Settings</a> |
+    <a href="/settings?iframe_type=admin">Admin Settings</a> |
+    <a href="/preferences">Writer Defaults</a>
     <h2>Your Documents</h2>
     <div>Path: ${breadcrumbs}</div>
     <ul>${fileLinks}</ul>
@@ -183,9 +187,6 @@ router.get("/", (req, res) => {
     </script>
       </body></html>`);
 });
-
-// <a href="/settings?access_token=${user.access_token}&iframe_type=user" >User Settings</a> |
-// <a href="/settings?access_token=${user.access_token}&iframe_type=admin" >Admin Settings</a>
 
 // Edit document with Collabora (WOPI)
 router.get("/edit", async (req, res) => {
@@ -237,6 +238,7 @@ router.get("/edit", async (req, res) => {
     <input name="closebutton" value="1" type="hidden" id="close-button-form"/>
     <input name="ui_defaults" value="UIMode=tabbed;TextSidebar=false;TextRuler=true;" type="hidden" id="ui-defaults"/>
     <input name="access_token" value="${wopiAccessToken}" type="hidden" id="access-token"/>
+    <input name="access_token_ttl" value="604800" type="hidden" id="access-token-ttl"/>
     <input type="submit" value="" />
   </form>
 </div>
@@ -305,49 +307,234 @@ router.delete("/edit", async (req, res) => {
   }
 });
 
-// router.get("/settings", async (req, res) => {
-//   // Example query parameters
-//   const { access_token, iframe_type } = req.query;
-//
-//   // iframe_type: "user" or "admin"
-//   const type = iframe_type === "admin" ? "admin" : "user";
-//
-//   // Build iframe URL (Collabora expects a POST normally, but can also be set via form)
-//   const iframeSrc = req.session.user.settings_url;
-//
-//   // HTML page with form post to Collabora iframe
-//   const html = `
-// <!DOCTYPE html>
-// <html lang="en">
-// <head>
-// <meta charset="UTF-8">
-// <title>Collabora Settings</title>
-// <style>
-// html, body { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
-// #collabora-settings-iframe { border: none; width: 100%; height: 100vh; }
-// </style>
-// </head>
-// <body>
-// <form id="settingsForm" action="${iframeSrc}" method="post" enctype="multipart/form-data" target="collabora-settings-iframe">
-//     <input type="hidden" name="access_token" value="${access_token}">
-//     <input type="hidden" name="iframe_type" value="${type}">
-//     <input type="hidden" name="wopi_setting_base_url" value="${MIDDLEWARE_SERVER}/wopi/settings">
-//     <!-- Optional: pass theme or CSS variables -->
-//     <input type="hidden" name="ui_theme" value="light">
-// </form>
-//
-// <iframe id="collabora-settings-iframe" name="collabora-settings-iframe"></iframe>
-//
-// <script>
-//     // Auto-submit the form to load iframe
-//     document.getElementById('settingsForm').submit();
-// </script>
-// </body>
-// </html>
-// `;
-//
-//   res.send(html);
-// });
+// Settings iframe page
+router.get("/settings", async (req, res) => {
+  const { iframe_type } = req.query;
+  const type = iframe_type === "admin" ? "admin" : "user";
+  const iframeSrc = req.session.user.settings_url;
+
+  if (!iframeSrc) {
+    return res.status(400).send("No settings URL available. Try editing a document first to discover the Collabora settings URL.");
+  }
+
+  const wopiAccessToken = createAccessToken(req.session.user, null, type === "admin");
+
+  const typeLabel = type === "admin" ? "Admin Settings" : "User Settings";
+  const otherType = type === "admin" ? "user" : "admin";
+  const otherLabel = type === "admin" ? "User Settings" : "Admin Settings";
+
+  const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${typeLabel} — Waffle WOPI</title>
+<style>
+html, body { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
+body { font-family: Arial, sans-serif; }
+.header { display: flex; align-items: center; gap: 16px; padding: 10px 20px; background: #f5f5f5; border-bottom: 1px solid #ddd; box-sizing: border-box; }
+.header h2 { margin: 0; font-size: 16px; color: #333; }
+.header a { text-decoration: none; color: #007BFF; font-size: 14px; }
+.header a:hover { text-decoration: underline; }
+.header .switch-btn { margin-left: auto; padding: 6px 14px; font-size: 13px; background: #007BFF; color: #fff; border: none; border-radius: 4px; cursor: pointer; text-decoration: none; }
+.header .switch-btn:hover { background: #0056b3; text-decoration: none; }
+#collabora-settings-iframe { border: none; width: 100%; height: calc(100vh - 45px); }
+#loading { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #666; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h2>${typeLabel}</h2>
+  <a href="/">&larr; Home</a>
+  <span style="color:#999;font-size:13px">|</span>
+  <a href="/preferences">Writer Defaults</a>
+  <a class="switch-btn" href="/settings?iframe_type=${otherType}">Switch to ${otherLabel}</a>
+</div>
+
+<form id="settingsForm" action="${iframeSrc}" method="post" enctype="multipart/form-data" target="collabora-settings-iframe">
+    <input type="hidden" name="access_token" value="${wopiAccessToken}">
+    <input type="hidden" name="access_token_ttl" value="3600">
+    <input type="hidden" name="iframe_type" value="${type}">
+    <input type="hidden" name="wopi_setting_base_url" value="${MIDDLEWARE_SERVER}/wopi/settings">
+    <input type="hidden" name="ui_theme" value="light">
+</form>
+
+<div id="loading">Loading settings…</div>
+<iframe id="collabora-settings-iframe" name="collabora-settings-iframe" onload="document.getElementById('loading').style.display='none'"></iframe>
+
+<script>
+    document.getElementById('settingsForm').submit();
+</script>
+</body>
+</html>
+`;
+
+  res.send(html);
+});
+
+// Writer default preferences (per-user XCU)
+router.get("/preferences", (req, res) => {
+  const user = req.session.user;
+  const safeName = sanitizeUsername(user.name || user.id);
+  const existing = getExistingXcu(SETTINGS_DIR, safeName) || {};
+
+  const fonts = [
+    { group: "Recommended", options: [
+      "Source Sans Pro", "Carlito", "Caladea",
+      "Liberation Serif", "Liberation Sans", "Liberation Sans Narrow", "Liberation Mono",
+      "DejaVu Serif", "DejaVu Serif Condensed", "DejaVu Sans", "DejaVu Sans Condensed", "DejaVu Sans Mono",
+      "Noto Serif", "Noto Sans", "Open Sans", "Karla", "Rubik",
+    ] },
+    { group: "Serif", options: [
+      "Amiri", "Amiri Quran", "David Libre", "Frank Ruhl Hofshi",
+      "Gentium Basic", "Gentium Book Basic",
+      "Linux Libertine G", "Linux Libertine Display G",
+      "Miriam Libre",
+      "Noto Serif Armenian", "Noto Serif Bengali", "Noto Serif Devanagari",
+      "Noto Serif Georgian", "Noto Serif Gujarati", "Noto Serif Hebrew",
+      "Noto Serif JP", "Noto Serif KR", "Noto Serif Kannada",
+      "Noto Serif Khmer", "Noto Serif Lao", "Noto Serif Malayalam",
+      "Noto Serif SC", "Noto Serif TC", "Noto Serif Tamil",
+      "Noto Serif Telugu", "Noto Serif Thai",
+      "Scheherazade",
+    ] },
+    { group: "Sans-Serif", options: [
+      "Agdasima", "Alef", "Bacasime Antique", "Belanosima",
+      "Linux Biolinum G", "Lunasima",
+      "Noto Kufi Arabic", "Noto Naskh Arabic", "Noto Nastaliq Urdu",
+      "Noto Sans Arabic", "Noto Sans Armenian", "Noto Sans Avestan",
+      "Noto Sans Balinese", "Noto Sans Bamum", "Noto Sans Batak",
+      "Noto Sans Bengali", "Noto Sans Brahmi", "Noto Sans Buginese",
+      "Noto Sans Buhid", "Noto Sans Canadian Aboriginal", "Noto Sans Carian",
+      "Noto Sans Cham", "Noto Sans Cherokee", "Noto Sans Coptic",
+      "Noto Sans Cuneiform", "Noto Sans Cypriot", "Noto Sans Deseret",
+      "Noto Sans Devanagari", "Noto Sans Egyptian Hieroglyphs",
+      "Noto Sans Ethiopic", "Noto Sans Georgian", "Noto Sans Glagolitic",
+      "Noto Sans Gothic", "Noto Sans Gujarati", "Noto Sans Gurmukhi",
+      "Noto Sans Hanunoo", "Noto Sans Hebrew", "Noto Sans Imperial Aramaic",
+      "Noto Sans Inscriptional Pahlavi", "Noto Sans Inscriptional Parthian",
+      "Noto Sans JP", "Noto Sans Javanese", "Noto Sans KR",
+      "Noto Sans Kaithi", "Noto Sans Kannada", "Noto Sans Kayah Li",
+      "Noto Sans Kharoshthi", "Noto Sans Khmer", "Noto Sans Lao",
+      "Noto Sans Lepcha", "Noto Sans Limbu", "Noto Sans Linear B",
+      "Noto Sans Lisu", "Noto Sans Lycian", "Noto Sans Lydian",
+      "Noto Sans Malayalam", "Noto Sans Mandaic", "Noto Sans Meetei Mayek",
+      "Noto Sans Mongolian", "Noto Sans Myanmar", "Noto Sans NKo",
+      "Noto Sans New Tai Lue", "Noto Sans Ogham", "Noto Sans Ol Chiki",
+      "Noto Sans Old Italic", "Noto Sans Old Persian",
+      "Noto Sans Old South Arabian", "Noto Sans Old Turkic",
+      "Noto Sans Oriya", "Noto Sans Osmanya", "Noto Sans Phags Pa",
+      "Noto Sans Phoenician", "Noto Sans Rejang", "Noto Sans Runic",
+      "Noto Sans SC", "Noto Sans Samaritan", "Noto Sans Saurashtra",
+      "Noto Sans Shavian", "Noto Sans Sinhala", "Noto Sans Sundanese",
+      "Noto Sans Syloti Nagri", "Noto Sans Symbols",
+      "Noto Sans Syriac Eastern", "Noto Sans Syriac Estrangela", "Noto Sans Syriac Western",
+      "Noto Sans TC", "Noto Sans Tagalog", "Noto Sans Tagbanwa",
+      "Noto Sans Tai Le", "Noto Sans Tai Tham", "Noto Sans Tai Viet",
+      "Noto Sans Tamil", "Noto Sans Telugu", "Noto Sans Thaana",
+      "Noto Sans Thai", "Noto Sans Tibetan", "Noto Sans Tifinagh",
+      "Noto Sans Ugaritic", "Noto Sans Vai", "Noto Sans Yi",
+      "Open Sans Condensed", "Open Sans SemiCondensed",
+      "Reem Kufi",
+    ] },
+    { group: "Display / Decorative", options: [
+      "Caprasimo", "Lugrasimo", "Lumanosimo", "OpenDyslexic",
+    ] },
+    { group: "Symbols", options: [
+      "DejaVu Math TeX Gyre", "Noto Color Emoji", "Noto Emoji", "OpenSymbol",
+    ] },
+  ];
+
+  const sizes = [8, 9, 10, 10.5, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72];
+
+  function fontOptions(selected) {
+    return fonts
+      .map(
+        (g) =>
+          `<optgroup label="${g.group}">${g.options
+            .map((f) => `<option value="${f}"${f === selected ? " selected" : ""}>${f}</option>`)
+            .join("")}</optgroup>`
+      )
+      .join("");
+  }
+
+  function sizeOptions(selected) {
+    return sizes
+      .map((s) => `<option value="${s}"${String(s) === String(selected) ? " selected" : ""}>${s} pt</option>`)
+      .join("");
+  }
+
+  function styleSection(key, def) {
+    const prefs = existing[key] || {};
+    const curFont = prefs.font || "Source Sans Pro";
+    const curSize = prefs.fontSize || def.defaultSize;
+    return `
+  <fieldset style="margin:12px 0;padding:10px;border:1px solid #ccc;border-radius:4px">
+    <legend><strong>${def.label}</strong></legend>
+    <div><label>Font:</label> <select name="${key}_font">${fontOptions(curFont)}</select></div>
+    <div><label>Size:</label> <select name="${key}_fontSize">${sizeOptions(curSize)}</select></div>
+  </fieldset>`;
+  }
+
+  const sections = Object.entries(STYLE_DEFINITIONS).map(([key, def]) => styleSection(key, def)).join("\n");
+
+  const saved = req.query.saved === "1" ? '<p style="color:green;font-weight:bold">Preferences saved!</p>' : "";
+  const hasXcu = existing ? '<p style="color:green">&#10003; Active configuration loaded</p>' : '<p style="color:#888">Not yet configured</p>';
+
+  res.send(`<!DOCTYPE html><html><head><title>Writer Defaults — ${user.name}</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 20px; }
+h1 { color: #333; }
+label { display: inline-block; width: 140px; margin: 6px 0; }
+select { padding: 4px; min-width: 200px; }
+input[type=submit] { padding: 8px 20px; font-size: 14px; margin-top: 12px; }
+fieldset { margin: 12px 0; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+legend { font-weight: bold; padding: 0 6px; }
+</style></head><body>
+<h1>Writer Defaults for ${user.name}</h1>
+<a href="/">&larr; Back to Home</a>
+${saved}
+${hasXcu}
+<form method="POST" action="/preferences">${sections}
+  <div><input type="submit" value="Save Preferences"></div>
+</form>
+<p style="font-size:0.85em;color:#666">These settings generate a per-user XCU file loaded by Collabora Online. Font changes apply when you open a new Writer document.</p>
+</body></html>`);
+});
+
+router.post("/preferences", (req, res) => {
+  const user = req.session.user;
+  const safeName = sanitizeUsername(user.name || user.id);
+  const styles = {};
+
+  for (const key of Object.keys(STYLE_DEFINITIONS)) {
+    const font = req.body[`${key}_font`];
+    const fontSize = req.body[`${key}_fontSize`];
+    if (font && fontSize) {
+      styles[key] = { font, fontSize };
+    }
+  }
+
+  if (Object.keys(styles).length === 0) {
+    return res.status(400).send("Missing required fields. <a href='/preferences'>Back</a>");
+  }
+
+  const xcuContent = generateWriterXcu(styles);
+  const xcuDir = path.join(SETTINGS_DIR, "userconfig", "xcu");
+  const xcuPath = path.join(xcuDir, `${safeName}_writer.xcu`);
+
+  try {
+    fs.mkdirSync(xcuDir, { recursive: true });
+    fs.writeFileSync(xcuPath, xcuContent, "utf8");
+  } catch (err) {
+    console.error("Failed to save XCU:", err);
+    return res.status(500).send("Failed to save preferences. <a href='/preferences'>Back</a>");
+  }
+
+  res.redirect("/preferences?saved=1");
+});
 
 // Create new document
 router.post("/create/:createType", async (req, res) => {
@@ -378,9 +565,18 @@ router.post("/create/:createType", async (req, res) => {
   if (fs.existsSync(filePath)) return res.send("Error: File exists. <a href='/'>Back</a>");
 
   try {
-    // ensure directory exists
+    // Look up user's XCU font preferences for .docx files
+    let fontPrefs = null;
+    if (req.params.createType === "docx") {
+      const safeName = sanitizeUsername(req.session.user.name || req.session.user.id);
+      const existing = getExistingXcu(SETTINGS_DIR, safeName);
+      if (existing && existing.Standard && existing.Standard.font) {
+        fontPrefs = { font: existing.Standard.font, fontSize: existing.Standard.fontSize || "12" };
+      }
+    }
+
     await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
-    await createEmptyFile(filePath, req.params.createType, req.session.user.name);
+    await createEmptyFile(filePath, req.params.createType, req.session.user.name, fontPrefs);
     const token = createFileToken(rel);
     res.redirect(`/edit?file=${encodeURIComponent(token)}`);
   } catch (err) {

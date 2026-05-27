@@ -12,8 +12,11 @@ let xpath = require("xpath");
 const multer = require("multer");
 const upload = multer({ dest: "/tmp" });
 const { decode: utf7Decode } = require("../helpers/utf7");
+const { listSettingsFiles } = require("../helpers/files.js");
 
-const { DOCUMENTSERVER_URL, FILES_DIR, MIDDLEWARE_SERVER } = require("../helpers/vars.js");
+const bodyParser = require("body-parser");
+
+const { DOCUMENTSERVER_URL, FILES_DIR, MIDDLEWARE_SERVER, SETTINGS_DIR } = require("../helpers/vars.js");
 
 const { createFileToken, decodeFileToken } = require("../helpers/filetoken.js");
 
@@ -90,7 +93,9 @@ router.get("/files/:fileId/contents", function (req, res) {
  *  The PutFile wopi endpoint is triggered by a request with a POST verb at
  *  https://HOSTNAME/wopi/files/<document_id>/contents
  */
-router.post("/files/:fileId/contents", function (req, res) {
+const rawBodyParser = bodyParser.raw({ limit: "200mb" });
+
+router.post("/files/:fileId/contents", rawBodyParser, function (req, res) {
   if (!req.wopi.canWrite) {
     return res.status(403).json({ error: "Read-only access" });
   }
@@ -195,34 +200,30 @@ router.get("/collaboraUrl", function (req, res) {
   });
 });
 
-/* *
-// e.g. settings/userconfig/xcu/paragraphStyles.xcu
-// e.g. settings/systemconfig/xcu/defaultStyles.xcu
+// Settings file listing
 router.get("/settings", (req, res) => {
   const { type } = req.query;
 
-  let response = {};
   try {
-    const files = listSettingsFiles(SETTINGS_DIR, MIDDLEWARE_SERVER);
-    res.json({ files });
+    if (type === "userconfig") {
+      const files = listSettingsFiles(SETTINGS_DIR, MIDDLEWARE_SERVER, "userconfig");
+      return res.json({ files });
+    } else if (type === "systemconfig") {
+      const files = listSettingsFiles(SETTINGS_DIR, MIDDLEWARE_SERVER, "systemconfig");
+      return res.json({ files });
+    } else if (!type) {
+      const userconfig = listSettingsFiles(SETTINGS_DIR, MIDDLEWARE_SERVER, "userconfig");
+      const systemconfig = listSettingsFiles(SETTINGS_DIR, MIDDLEWARE_SERVER, "systemconfig");
+      return res.json({ userconfig, systemconfig });
+    } else {
+      return res.status(400).json({ error: "Invalid type parameter" });
+    }
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message });
   }
-
-  if (type === "userconfig") {
-    response = listSettingsFiles(SETTINGS_DIR, MIDDLEWARE_SERVER, "userconfig");
-  } else if (type === "systemconfig") {
-    response = listSettingsFiles(SETTINGS_DIR, MIDDLEWARE_SERVER, "systemconfig");
-  } else {
-    return res.status(400).json({ error: "Invalid type parameter" });
-  }
-
-  res.json(response);
 });
 
-// TODO: Save settings to files
-// e.g. settings/userconfig/xcu/paragraphStyles.xcu
-// e.g. settings/systemconfig/xcu/defaultStyles.xcu
+// Upload a new settings file (multipart or raw body file upload)
 router.post("/settings/upload", (req, res) => {
   upload.single("file")(req, res, function (err) {
     if (err) {
@@ -231,42 +232,124 @@ router.post("/settings/upload", (req, res) => {
 
     const { fileId } = req.query;
 
-    if (!fileId || !req.file) {
-      return res.status(400).json({ error: "Missing fileId or file" });
+    if (!fileId) {
+      return res.status(400).json({ error: "Missing fileId" });
     }
 
-    // Build target path
-    const parts = fileId.split("/").filter(Boolean); // remove empty strings
-    // parts = ["settings", "userconfig", "xcu", "paragraphStyles.xcu"]
+    // Build target path, stripping the leading /settings/ prefix
+    // e.g. "/settings/systemconfig/xcu/doc.xcu" -> ["systemconfig", "xcu", "doc.xcu"]
+    const parts = fileId.split("/").filter(Boolean).filter((p) => p !== "settings");
     const targetDir = path.join(SETTINGS_DIR, ...parts.slice(0, -1));
     const targetPath = path.join(targetDir, parts[parts.length - 1]);
 
-    try {
-      fs.mkdirSync(targetDir, { recursive: true });
-      fs.renameSync(req.file.path, targetPath);
-    } catch (fsErr) {
-      return res.status(500).json({ error: "Failed to save file", details: fsErr.message });
+    const writeFile = (buf) => {
+      try {
+        fs.mkdirSync(targetDir, { recursive: true });
+        fs.writeFileSync(targetPath, buf);
+      } catch (fsErr) {
+        return res.status(500).json({ error: "Failed to save file", details: fsErr.message });
+      }
+
+      const newStamp = Date.now().toString();
+
+      res.json({
+        status: "success",
+        filename: parts[parts.length - 1],
+        details: {
+          stamp: newStamp,
+          uri: `${MIDDLEWARE_SERVER}/wopi/settings/files${fileId}`,
+        },
+      });
+    };
+
+    // If multer parsed a multipart file, use it
+    if (req.file) {
+      const buf = fs.readFileSync(req.file.path);
+      fs.unlinkSync(req.file.path);
+      return writeFile(buf);
     }
 
-    // Generate new stamp (simple example: timestamp)
-    const newStamp = Date.now().toString();
-
-    res.json({
-      status: "success",
-      filename: parts[parts.length - 1],
-      details: {
-        stamp: newStamp,
-        uri: `https://${MIDDLEWARE_SERVER}/${fileId}`,
-      },
+    // Fallback: read raw body from stream
+    let body = [];
+    req.on("data", (chunk) => body.push(chunk));
+    req.on("end", () => {
+      writeFile(Buffer.concat(body));
     });
   });
 });
-*/
+
+// Read a settings file (WOPI-style GetFile for settings files)
+router.get("/settings/files/:fileId", (req, res) => {
+  const fileId = req.params.fileId;
+  const safePath = path.normalize(fileId).replace(/\\/g, "/");
+
+  if (safePath.startsWith("..") || path.isAbsolute(safePath)) {
+    return res.status(400).json({ error: "Invalid path" });
+  }
+
+  const filePath = path.join(SETTINGS_DIR, safePath);
+  const normFile = path.normalize(filePath);
+
+  if (!normFile.startsWith(path.normalize(SETTINGS_DIR))) {
+    return res.status(400).json({ error: "Invalid path" });
+  }
+
+  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    return res.status(404).json({ error: "File not found" });
+  }
+
+  res.sendFile(filePath);
+});
+
+// Write or delete a settings file (WOPI-style PutFile/DeleteFile for settings)
+router.post("/settings/files/:fileId", (req, res) => {
+  const fileId = req.params.fileId;
+  const safePath = path.normalize(fileId).replace(/\\/g, "/");
+
+  if (safePath.startsWith("..") || path.isAbsolute(safePath)) {
+    return res.status(400).json({ error: "Invalid path" });
+  }
+
+  const filePath = path.join(SETTINGS_DIR, safePath);
+  const normFile = path.normalize(filePath);
+
+  if (!normFile.startsWith(path.normalize(SETTINGS_DIR))) {
+    return res.status(400).json({ error: "Invalid path" });
+  }
+
+  const override = req.header("X-WOPI-Override");
+
+  if (override === "DELETE") {
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: "File not found" });
+    }
+    try {
+      fs.unlinkSync(filePath);
+      return res.json({ status: "deleted" });
+    } catch (e) {
+      return res.status(500).json({ error: "Failed to delete file" });
+    }
+  }
+
+  // PutFile: save file content from raw body
+  let body = [];
+  req.on("data", (chunk) => body.push(chunk));
+  req.on("end", () => {
+    const buf = Buffer.concat(body);
+    try {
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, buf);
+      res.json({ status: "saved", stamp: Date.now().toString() });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to save file" });
+    }
+  });
+});
 
 /* *
  *  wopi X-WOPI-Overrides endpoint
  */
-router.post("/files/:fileId", (req, res) => {
+router.post("/files/:fileId", rawBodyParser, (req, res) => {
   const fileId = req.params.fileId;
   let rel;
   try {

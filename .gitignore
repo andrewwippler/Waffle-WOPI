@@ -19,3 +19,4 @@ yarn-error.log
 .pnpm-debug.log
 files
 build.sh
+templates/writer_defaults.ott

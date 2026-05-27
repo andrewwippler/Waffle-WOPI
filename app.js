@@ -3,7 +3,6 @@
 let express = require("express");
 let path = require("path");
 let logger = require("morgan");
-let bodyParser = require("body-parser");
 let cookieParser = require("cookie-parser");
 const fs = require("fs");
 const session = require("express-session");
@@ -14,9 +13,7 @@ let wopiRouter = require("./routes/wopi");
 let authRouter = require("./routes/auth");
 const { requireLogin, validateAccessToken } = require("./helpers/middleware");
 
-// maximum request body size handled by the bodyParser package
-// increase it if you need to handle larger files
-const maxDocumentSize = "100kb";
+const maxDocumentSize = "200mb";
 
 const {
   DEX_ISSUER,
@@ -70,14 +67,22 @@ app.use(cookieParser());
 if (!fs.existsSync(FILES_DIR)) fs.mkdirSync(FILES_DIR, { recursive: true });
 
 app.use(logger("dev"));
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
-app.use(bodyParser.raw({ limit: maxDocumentSize }));
+app.use(express.json({ limit: maxDocumentSize }));
+app.use(express.urlencoded({ extended: false, limit: maxDocumentSize }));
 
 app.use("/auth", authRouter);
 app.get("/favicon.ico", (req, res) => res.sendStatus(200));
 app.use("/wopi", validateAccessToken, wopiRouter);
 app.use("/", requireLogin, indexRouter);
 app.use(express.static(path.join(__dirname, "html")));
+
+// Error handler
+app.use((err, req, res, next) => {
+  if (err.type === "entity.too.large") {
+    return res.status(413).json({ error: "File too large", maxSize: maxDocumentSize });
+  }
+  console.error(err);
+  res.status(500).json({ error: "Internal server error" });
+});
 
 module.exports = app;
