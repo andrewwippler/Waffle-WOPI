@@ -81,6 +81,7 @@ function issueAccessTokenCookie(req, res, user) {
 
 const client = jwksClient({
   jwksUri: `${DEX_ISSUER}/keys`,
+  timeout: 5000,
 });
 
 function getKey(header, callback) {
@@ -137,7 +138,7 @@ async function validateAccessToken(req, res, next) {
         resolve();
       } catch (err2) {
         console.error("Invalid token:", err2.message);
-        res.redirect("/auth/login");
+        res.status(401).json({ error: "Invalid access token" });
         resolve();
       }
     });

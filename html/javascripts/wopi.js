@@ -1,7 +1,7 @@
 function post(msg) {
   window.document
     .querySelector("#collabora-online-viewer")
-    .contentWindow.postMessage(JSON.stringify(msg), "*");
+    .contentWindow.postMessage(msg, "*");
 }
 
 function postReady() {
@@ -12,7 +12,7 @@ function postReady() {
 
 function receiveMessage(event) {
   console.log("==== receiveMessage: " + event.data);
-  let msg = JSON.parse(event.data);
+  let msg = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
   if (!msg) {
     return;
   }

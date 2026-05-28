@@ -48,6 +48,7 @@ router.get("/files/:fileId", function (req, res) {
   const stats = fs.statSync(filepath);
   const json = {
     BaseFileName: path.basename(rel),
+    BreadcrumbDocName: path.basename(rel),
     Size: stats.size,
     UserFriendlyName: req.wopi.name,
     UserCanWrite: req.wopi.canWrite,
@@ -58,6 +59,7 @@ router.get("/files/:fileId", function (req, res) {
     SupportsLocks: true,
     SupportsGetLock: true,
     UserCanRename: req.wopi.canWrite,
+    HostUrl: MIDDLEWARE_SERVER,
   };
   console.log("Available settings", json);
   res.json(json);
@@ -369,10 +371,13 @@ router.post("/files/:fileId", rawBodyParser, (req, res) => {
     return res.sendStatus(200);
   } else if (override === "UNLOCK") {
     const lockValue = req.header("X-WOPI-Lock");
-    if (!locks[fileId] || locks[fileId].value !== lockValue) {
+    if (!locks[fileId]) {
+      return res.sendStatus(200);
+    }
+    if (locks[fileId].value !== lockValue) {
       return res
         .status(409)
-        .header("X-WOPI-Lock", locks[fileId]?.value || "")
+        .header("X-WOPI-Lock", locks[fileId].value)
         .end();
     }
     delete locks[fileId];

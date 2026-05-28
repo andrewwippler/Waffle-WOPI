@@ -238,7 +238,6 @@ router.get("/edit", async (req, res) => {
     <input name="closebutton" value="1" type="hidden" id="close-button-form"/>
     <input name="ui_defaults" value="UIMode=tabbed;TextSidebar=false;TextRuler=true;" type="hidden" id="ui-defaults"/>
     <input name="access_token" value="${wopiAccessToken}" type="hidden" id="access-token"/>
-    <input name="access_token_ttl" value="604800" type="hidden" id="access-token-ttl"/>
     <input type="submit" value="" />
   </form>
 </div>
