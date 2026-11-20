@@ -1,12 +1,12 @@
 name: Create and publish a Docker image
 
+# Configures this workflow to run every time a change is pushed to `main`.
 on:
   push:
     branches: ["main"]
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build-and-push-image:
@@ -33,6 +33,9 @@ jobs:
         uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=,format=long
+            type=ref,event=branch
 
       - name: Build and push Docker image
         id: push
@@ -56,21 +59,17 @@ jobs:
           WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
           REGISTRY: ${{ env.REGISTRY }}
-          META_TAGS: ${{ steps.meta.outputs.tags }}
           SHA: ${{ github.sha }}
         run: |
-          PRIMARY_TAG=$(printf '%s\n' "$META_TAGS" | head -n1)
-          IMAGE_TAG="${PRIMARY_TAG##*:}"
-          PREFIX="${REGISTRY}/${IMAGE_NAME%%/*}"
-          IMAGE="${IMAGE_NAME##*/}"
+          PREFIX="${REGISTRY}/andrewwippler"
 
           PAYLOAD=$(jq -n \
             --arg version "$SHA" \
-            --arg tag "$IMAGE_TAG" \
+            --arg tag "$SHA" \
             --arg ns "collabora" \
             --arg deploy "collabora-middleware" \
             --arg container "middleware" \
-            --arg image "$IMAGE" \
+            --arg image "waffle-wopi" \
             --arg prefix "$PREFIX" \
             '{
               version: $version,
