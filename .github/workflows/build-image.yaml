@@ -63,7 +63,7 @@ jobs:
           PREFIX="${REGISTRY}/andrewwippler"
 
           PAYLOAD=$(jq -n \
-            --arg version "$SHA" \
+            --arg version "sha-$SHA" \
             --arg tag "$SHA" \
             --arg ns "collabora" \
             --arg deploy "collabora-middleware" \
