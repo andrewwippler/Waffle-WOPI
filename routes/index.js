@@ -21,6 +21,12 @@ const {
   DOCUMENTSERVER_URL,
 } = require("../helpers/vars.js");
 
+function isInsideFilesDir(targetPath) {
+  const root = path.resolve(FILES_DIR);
+  const target = path.resolve(targetPath);
+  return target === root || target.startsWith(root + path.sep);
+}
+
 function isTokenExpiring(token, leeway = 86400) {
   try {
     const payload = JSON.parse(
@@ -539,13 +545,15 @@ router.post("/preferences", (req, res) => {
 router.post("/create/:createType", async (req, res) => {
   let { filename, currentpath } = req.body;
   currentpath = currentpath || "";
+  filename = filename || "";
+  const requestedRel = currentpath ? path.join(currentpath, filename) : filename;
+  if (!isInsideFilesDir(path.resolve(FILES_DIR, requestedRel))) return res.send("Invalid path");
   const sanitizedName = filename.replace(/[\/\\?%*|"<>]/g, "").replace(/[ :]/g, "_");
 
   if (req.params.createType === "folder") {
     const rel = currentpath ? path.join(currentpath, sanitizedName) : sanitizedName;
     const dirPath = path.join(FILES_DIR, rel);
-    const normDir = path.normalize(dirPath);
-    if (!normDir.startsWith(path.normalize(FILES_DIR))) return res.send("Invalid path");
+    if (!isInsideFilesDir(dirPath)) return res.send("Invalid path");
     try {
       await fs.promises.mkdir(dirPath, { recursive: true });
       res.redirect(`/?path=${encodeURIComponent(rel)}`);
@@ -555,11 +563,13 @@ router.post("/create/:createType", async (req, res) => {
       res.send("Error creating folder. <a href='/'>Back</a>");
     }
   }
-  filename = sanitizedName + "." + req.params.createType;
+  const extension = "." + req.params.createType;
+  filename = sanitizedName.toLowerCase().endsWith(extension.toLowerCase())
+    ? sanitizedName
+    : sanitizedName + extension;
   const rel = currentpath ? path.join(currentpath, filename) : filename;
   const filePath = path.join(FILES_DIR, rel);
-  const normFile = path.normalize(filePath);
-  if (!normFile.startsWith(path.normalize(FILES_DIR))) return res.send("Invalid path");
+  if (!isInsideFilesDir(filePath)) return res.send("Invalid path");
 
   if (fs.existsSync(filePath)) return res.send("Error: File exists. <a href='/'>Back</a>");
 

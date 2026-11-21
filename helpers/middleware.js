@@ -91,7 +91,7 @@ function getKey(header, callback) {
   });
 }
 
-async function validateAccessToken(req, res, next) {
+async function validateAccessToken(req, res, next, options = {}) {
   let token =
     req.query.access_token ||
     req.headers["authorization"]?.replace("Bearer ", "") ||
@@ -138,7 +138,17 @@ async function validateAccessToken(req, res, next) {
         resolve();
       } catch (err2) {
         console.error("Invalid token:", err2.message);
-        res.status(401).json({ error: "Invalid access token" });
+        if (options.redirectOnInvalid) {
+          req.session.redirectAfterLogin = req.originalUrl;
+          res.clearCookie("access_token", {
+            httpOnly: true,
+            secure: NODE_ENV === "production",
+            sameSite: "lax",
+          });
+          res.redirect("/auth/login");
+        } else {
+          res.status(401).json({ error: "Invalid access token" });
+        }
         resolve();
       }
     });
@@ -154,7 +164,7 @@ function requireLogin(req, res, next) {
   }
 
   if (req.cookies?.access_token) {
-    return validateAccessToken(req, res, next);
+    return validateAccessToken(req, res, next, { redirectOnInvalid: true });
   }
 
   if (req.session?.user) {
